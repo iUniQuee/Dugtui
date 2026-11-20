@@ -5,6 +5,15 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export type RoomStatus =
+  | 'pending'
+  | 'active'
+  | 'completed'
+  | 'PENDING_APPROVAL'
+  | 'PAID'
+  | 'REJECTED'
+  | 'CLAIMED';
+
 export interface Room {
   id: string;
   code: string;
@@ -15,10 +24,13 @@ export interface Room {
   fee_amount: number;
   participant_count: number | null;
   mode: 'equal' | 'random' | null;
-  status: 'pending' | 'active' | 'completed' | 'PAID' | 'CLAIMED';
+  status: RoomStatus;
   claimed_by: string | null;
   claimed_at: string | null;
   paid_at: string | null;
+  payment_code: string | null;
+  payment_reviewed_at: string | null;
+  reject_reason: string | null;
   qpay_invoice_id: string | null;
   organizer_name: string | null;
   message: string | null;
@@ -45,6 +57,15 @@ export interface Contribution {
   amount: number;
   message: string | null;
   created_at: string;
+}
+
+export interface PlatformSettings {
+  id: number;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  qr_url: string;
+  updated_at: string;
 }
 
 export interface Withdrawal {
