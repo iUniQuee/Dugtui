@@ -1,30 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, ExternalLink, FlaskConical, Loader2, RefreshCw, X } from 'lucide-react';
-import {
-  checkQpayPayment,
-  createQpayInvoice,
-  simulateQpayPayment,
-  type QpayInvoice,
-} from '@/lib/qpay';
+import { useCallback, useEffect, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+import { AlertCircle, CheckCircle2, Loader2, RefreshCw, X } from 'lucide-react';
+import { checkQpayPayment, createQpayInvoice, type QpayInvoice } from '@/lib/qpay';
 
 function formatMnt(n: number): string {
   return new Intl.NumberFormat('mn-MN').format(n) + '₮';
 }
 
 /**
- * QPay төлбөрийн цонх: QR код, банкны апп-ийн deeplink-ууд,
- * төлбөр шалгах polling болон "Туршилтын төлбөр төлөх" товч.
- * Бүх QPay нууц мэдээлэл сервер талд; энэ компонент зөвхѩн invoice мэдээлэл авна.
+ * Bogd QPay төлбөрийн цонх: жинхэнэ нэхэмжлэхийн QR код, банкны апп-аар
+ * төлөх заавар болон "Төлбөр шалгах" товч. Бүх QPay нууц мэдээлэл сервер
+ * талд; энэ компонент зөвхөн invoice мэдээлэл авна.
  */
 export function QpayModal({
   amount,
   title,
+  senderInvoiceNo,
   onPaid,
   onClose,
 }: {
   amount: number;
   title: string;
-  onPaid: () => void;
+  senderInvoiceNo: string;
+  onPaid: (invoiceId: string) => void;
   onClose: () => void;
 }) {
   const [invoice, setInvoice] = useState<QpayInvoice | null>(null);
@@ -33,14 +31,14 @@ export function QpayModal({
   const [busy, setBusy] = useState(false);
   const [paid, setPaid] = useState(false);
 
-  const settled = useRef(false);
-
-  const finish = useCallback(() => {
-    if (settled.current) return;
-    settled.current = true;
-    setPaid(true);
-    onPaid();
-  }, [onPaid]);
+  const finish = useCallback(
+    (invoiceId: string) => {
+      if (paid) return;
+      setPaid(true);
+      onPaid(invoiceId);
+    },
+    [onPaid, paid]
+  );
 
   const createInvoice = useCallback(async () => {
     setLoading(true);
@@ -49,48 +47,22 @@ export function QpayModal({
       const inv = await createQpayInvoice({
         amount,
         description: title ? `Бэлгийн өрөө: ${title}` : 'Бэлгийн өрөө',
-        senderInvoiceNo: `GIFT-${Date.now()}`,
+        senderInvoiceNo,
       });
       setInvoice(inv);
+      if (!inv.qrImage && !inv.qrText) {
+        setError('QPay-с QR код ирсэнгүй. Дахин оролдоно уу.');
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'QPay нэхэмжлэх үүсгэж чадсангүй.');
+      setError(e instanceof Error ? e.message : 'Bogd QPay нэхэмжлэх үүсгэж чадсангүй.');
     } finally {
       setLoading(false);
     }
-  }, [amount, title]);
+  }, [amount, title, senderInvoiceNo]);
 
   useEffect(() => {
     void createInvoice();
   }, [createInvoice]);
-
-  // Төлбөрийн төлөвийг 3 секунд тутам шалгана
-  useEffect(() => {
-    if (!invoice || paid) return;
-    const id = window.setInterval(async () => {
-      try {
-        const status = await checkQpayPayment(invoice.invoiceId);
-        if (status.paid) finish();
-      } catch {
-        /* түр зуурын сүлжээний алдааг алгасна */
-      }
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [invoice, paid, finish]);
-
-  const handleSimulate = async () => {
-    if (!invoice || busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      const status = await simulateQpayPayment(invoice.invoiceId);
-      if (status.paid) finish();
-      else setError('Туршилтын төлбөр баталгаажсангүй.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Туршилтын төлбөр амжилтгүй.');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleCheck = async () => {
     if (!invoice || busy) return;
@@ -98,8 +70,8 @@ export function QpayModal({
     setError('');
     try {
       const status = await checkQpayPayment(invoice.invoiceId);
-      if (status.paid) finish();
-      else setError('Төлбөр хараахан ирээгүй байна. Банкны апп-аараа төлнө үү.');
+      if (status.paid) finish(invoice.invoiceId);
+      else setError('Төлбөр хараахан ороогүй байна. Банкны апп-аараа төлнө үү.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Төлбөр шалгаж чадсангүй.');
     } finally {
@@ -107,19 +79,18 @@ export function QpayModal({
     }
   };
 
-  // QPay-с жинхэнэ QR ирээгүй (туршилтын горим) үед public/qr.png-г харуулна
   const qrImageSrc = invoice?.qrImage
     ? invoice.qrImage.startsWith('data:')
       ? invoice.qrImage
       : `data:image/png;base64,${invoice.qrImage}`
-    : '/qr.png';
+    : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 max-h-[92vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-lg text-neutral-900">QPay төлбөр</h3>
+            <h3 className="font-semibold text-lg text-neutral-900">Bogd QPay төлбөр</h3>
             <p className="mt-1 text-sm text-neutral-500">
               {title ? `“${title}”` : 'Бэлгийн өрөө'} — {formatMnt(amount)}
             </p>
@@ -140,11 +111,11 @@ export function QpayModal({
           </div>
         )}
 
-        {!loading && error && !invoice && (
+        {!loading && !invoice && (
           <div className="mt-6 rounded-2xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex gap-2">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             <div>
-              <p>{error}</p>
+              <p>{error || 'Bogd QPay нэхэмжлэх үүсгэж чадсангүй.'}</p>
               <button
                 onClick={() => void createInvoice()}
                 className="mt-2 inline-flex items-center gap-1 font-medium underline"
@@ -165,32 +136,28 @@ export function QpayModal({
             ) : (
               <>
                 <div className="mt-5 mx-auto w-fit rounded-2xl border-4 border-neutral-900 p-4 bg-white">
-                  <img
-                    src={qrImageSrc}
-                    alt="Төлбөрийн QR код"
-                    className="w-[200px] h-[200px] object-contain"
-                  />
+                  {qrImageSrc ? (
+                    <img
+                      src={qrImageSrc}
+                      alt="Bogd QPay төлбөрийн QR код"
+                      className="w-[200px] h-[200px] object-contain"
+                    />
+                  ) : invoice.qrText ? (
+                    <QRCodeSVG value={invoice.qrText} size={200} />
+                  ) : (
+                    <div className="w-[200px] h-[200px] flex items-center justify-center text-sm text-neutral-400 text-center px-4">
+                      QR код ирээгүй байна
+                    </div>
+                  )}
                 </div>
-                <p className="mt-3 text-center text-sm text-neutral-500">
-                  QR кодыг банкны апп-аараа уншуулж төлнө үү.
-                </p>
 
-                {invoice.bankLinks.length > 0 && (
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    {invoice.bankLinks.map((bank) => (
-                      <a
-                        key={bank.link}
-                        href={bank.link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 px-3 py-2.5 text-sm font-medium text-neutral-700 hover:border-neutral-400 hover:bg-neutral-50 transition-colors"
-                      >
-                        <span className="truncate">{bank.name}</span>
-                        <ExternalLink className="w-3.5 h-3.5 shrink-0 text-neutral-400" />
-                      </a>
-                    ))}
-                  </div>
-                )}
+                <p className="mt-3 text-center text-sm text-neutral-600 leading-relaxed">
+                  QPay-д холбогдсон банкны апп-аараа (Bogd, Khan, Golomt г.м.) энэ QR кодыг
+                  уншуулж төлнө үү.
+                </p>
+                <p className="mt-1 text-center text-xs text-neutral-400">
+                  Төлбөр төлсний дараа доорх «Төлбөр шалгах» товчийг дарна уу.
+                </p>
 
                 <button
                   onClick={() => void handleCheck()}
@@ -200,32 +167,12 @@ export function QpayModal({
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                   Төлбөр шалгах
                 </button>
-
-                {invoice.testMode && (
-                  <button
-                    onClick={() => void handleSimulate()}
-                    disabled={busy}
-                    className="mt-2 w-full rounded-xl bg-emerald-600 text-white py-3 font-semibold hover:bg-emerald-500 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <FlaskConical className="w-4 h-4" />
-                    Туршилтын төлбөр төлөх (Simulate Payment)
-                  </button>
-                )}
-
-                {invoice.testMode && (
-                  <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 leading-relaxed">
-                    QPay түлхүүр тохируулаагүй тул туршилтын горимд ажиллаж байна. Дээрх товчоор
-                    төлбөрийг дуурайж, өрөө үүсэх урсгалыг бүрэн шалгаж болно.
-                  </p>
-                )}
               </>
             )}
           </>
         )}
 
-        {error && invoice && (
-          <p className="mt-3 text-sm text-red-600">{error}</p>
-        )}
+        {error && invoice && !paid && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
         <button
           onClick={onClose}
