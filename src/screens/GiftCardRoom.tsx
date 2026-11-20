@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Gift, Lock, MousePointerClick, Wallet } from 'lucide-react';
+import { CheckCircle2, Clock, Gift, Lock, MousePointerClick, Wallet, XCircle } from 'lucide-react';
 import { supabase, type Room } from '@/lib/supabase';
 import { useAuth } from '@/lib/useAuth';
 import { GiftBg, Confetti, Money } from '@/components/Shell';
@@ -9,6 +9,9 @@ import { themeOf } from '@/lib/utils';
 /**
  * Бэлгийн карт: линкээр орж нэвтэрсэн хэрэглэгчид бэлгийг автоматаар
  * түүний бүртгэл рүү шилжүүлж, хэтэвчинд нь нэмнэ (claim_gift_card RPC).
+ *
+ * Бэлэг нь админ төлбөрийг баталсны дараа л идэвхждэг тул PENDING_APPROVAL
+ * үед хүлээх дэлгэц харуулж, 6 секунд тутам төлөвийг шалгана.
  */
 export function GiftCardRoom({
   room,
@@ -23,22 +26,42 @@ export function GiftCardRoom({
 }) {
   const theme = themeOf(room.theme);
   const { session } = useAuth();
+  const [live, setLive] = useState<Room>(room);
   const [claimedRoom, setClaimedRoom] = useState<Room | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState('');
   const [showCard, setShowCard] = useState(false);
 
   const running = useRef(false);
-  const mine = claimedRoom !== null;
-  const takenByOther = !!room.claimed_by && room.claimed_by !== session?.user?.id;
+  const approved = live.status === 'PAID' || live.status === 'CLAIMED' || live.status === 'active';
+  const takenByOther = !!live.claimed_by && live.claimed_by !== session?.user?.id;
+  const isMine = !!session?.user && live.claimed_by === session.user.id;
+
+  useEffect(() => {
+    setLive(room);
+  }, [room]);
+
+  // Админ батлахыг хүлээж байгаа үед төлөвийг тогтмол шинэчилнэ.
+  useEffect(() => {
+    if (approved || live.status === 'REJECTED') return;
+    const timer = setInterval(async () => {
+      const { data } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('code', live.code)
+        .maybeSingle();
+      if (data) setLive(data as Room);
+    }, 6000);
+    return () => clearInterval(timer);
+  }, [approved, live.code, live.status]);
 
   const claim = useCallback(async () => {
-    if (running.current || mine) return;
+    if (running.current || claimedRoom) return;
     running.current = true;
     setClaiming(true);
     setError('');
     const { data, error: err } = await supabase.rpc('claim_gift_card', {
-      p_code: room.code,
+      p_code: live.code,
     });
     running.current = false;
     setClaiming(false);
@@ -47,17 +70,18 @@ export function GiftCardRoom({
       return;
     }
     const next = data as Room;
+    setLive(next);
     setClaimedRoom(next);
     setShowCard(true);
     onClaimed?.(next);
-  }, [mine, onClaimed, room.code]);
+  }, [claimedRoom, live.code, onClaimed]);
 
   // Нэвтэрсэн даруйд (бүртгүүлэх эсвэл нэвтрэх) бэлэг автоматаар шилжинэ.
   useEffect(() => {
-    if (!session?.user || claimedRoom) return;
-    if (room.claimed_by && room.claimed_by !== session.user.id) return;
+    if (!session?.user || claimedRoom || takenByOther) return;
+    if (!approved) return;
     void claim();
-  }, [session?.user, claimedRoom, room.claimed_by, claim]);
+  }, [session?.user, claimedRoom, approved, takenByOther, claim]);
 
   const handleOpen = () => {
     if (!session) {
@@ -68,10 +92,10 @@ export function GiftCardRoom({
   };
 
   // ---- Амжилттай: бэлэг таны хэтэвчид орлоо ----
-  if (mine && showCard) {
+  if (claimedRoom && showCard) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <GiftBg theme={room.theme} />
+        <GiftBg theme={live.theme} />
         <Confetti />
         <motion.div
           initial={{ scale: 0.85, opacity: 0 }}
@@ -106,14 +130,58 @@ export function GiftCardRoom({
   if (takenByOther) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <GiftBg theme={room.theme} />
+        <GiftBg theme={live.theme} />
         <div className="w-full max-w-sm rounded-3xl bg-white shadow-xl border border-neutral-200 p-8 text-center">
           <Gift className="w-12 h-12 text-neutral-300 mx-auto" />
           <h1 className="mt-4 text-xl font-bold text-neutral-900">
             Энэ бэлгийг аль хэдийн авсан байна
           </h1>
           <p className="mt-2 text-sm text-neutral-500">
-            «{room.title}» бэлгийг өөр хэрэглэгч хүлээн авсан тул дахин авах боломжгүй.
+            «{live.title}» бэлгийг өөр хэрэглэгч хүлээн авсан тул дахин авах боломжгүй.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- төлбөр батлагдаагүй ----
+  if (live.status === 'REJECTED') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GiftBg theme={live.theme} />
+        <div className="w-full max-w-sm rounded-3xl bg-white shadow-xl border border-neutral-200 p-8 text-center">
+          <XCircle className="w-12 h-12 text-red-400 mx-auto" />
+          <h1 className="mt-4 text-xl font-bold text-neutral-900">Төлбөр батлагдаагүй</h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            «{live.title}» бэлгийн шилжүүлэг админаар батлагдсангүй.
+            {live.reject_reason ? ` Шалтгаан: ${live.reject_reason}` : ''}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- админ батлахыг хүлээж байна ----
+  if (!approved) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GiftBg theme={live.theme} />
+        <div className="w-full max-w-sm rounded-3xl bg-white shadow-xl border border-neutral-200 p-8 text-center">
+          <motion.div
+            animate={{ rotate: [-3, 3, -3] }}
+            transition={{ repeat: Infinity, duration: 2.6 }}
+          >
+            <Gift className="w-14 h-14 text-amber-400 mx-auto" />
+          </motion.div>
+          <h1 className="mt-4 text-xl font-bold text-neutral-900">
+            Төлбөр баталгаажихыг хүлээж байна
+          </h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            «{live.title}» бэлгийн шилжүүлгийг админ шалгаж байна. Батлагдмагц энэ хуудас
+            автоматаар шинэчлэгдэж, бэлэг таны хэтэвчид орно.
+          </p>
+          <p className="mt-3 text-xs text-neutral-400 flex items-center justify-center gap-1">
+            <Clock className="w-3.5 h-3.5" /> 6 секунд тутам шалгаж байна
           </p>
         </div>
       </div>
@@ -124,7 +192,7 @@ export function GiftCardRoom({
   if (!showCard) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <GiftBg theme={room.theme} />
+        <GiftBg theme={live.theme} />
         <div className="text-center">
           <motion.button
             onClick={handleOpen}
@@ -150,6 +218,11 @@ export function GiftCardRoom({
               шаардлагатай.
             </p>
           )}
+          {isMine && !claiming && (
+            <p className="mt-3 text-xs text-emerald-600">
+              Энэ бэлэг аль хэдийн таны хэтэвчид орсон байна.
+            </p>
+          )}
           {claiming && (
             <p className="mt-3 text-sm text-emerald-600">
               Бэлгийг таны бүртгэлд шилжүүлж байна...
@@ -171,7 +244,7 @@ export function GiftCardRoom({
   // ---- бэлгийн карт (нээсэн) ----
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <GiftBg theme={room.theme} />
+      <GiftBg theme={live.theme} />
       <Confetti />
       <motion.div
         initial={{ scale: 0.6, opacity: 0 }}
@@ -179,20 +252,20 @@ export function GiftCardRoom({
         transition={{ type: 'spring', bounce: 0.4 }}
         className={`w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden bg-gradient-to-br ${theme.gradient} text-white`}
       >
-        {room.image_url && (
-          <img src={room.image_url} alt="" className="w-full h-48 object-cover" />
+        {live.image_url && (
+          <img src={live.image_url} alt="" className="w-full h-48 object-cover" />
         )}
         <div className="p-8 text-center">
-          <h1 className="text-xl font-bold">{room.title}</h1>
-          {room.organizer_name && (
-            <p className="mt-1 text-sm opacity-80">— {room.organizer_name}</p>
+          <h1 className="text-xl font-bold">{live.title}</h1>
+          {live.organizer_name && (
+            <p className="mt-1 text-sm opacity-80">— {live.organizer_name}</p>
           )}
-          {room.message && (
-            <p className="mt-4 text-sm leading-relaxed opacity-95">{room.message}</p>
+          {live.message && (
+            <p className="mt-4 text-sm leading-relaxed opacity-95">{live.message}</p>
           )}
           <div className="mt-6 rounded-2xl bg-white/15 backdrop-blur px-6 py-4">
             <p className="text-xs opacity-80">Бэлгийн дүн</p>
-            <Money amount={room.total_amount} className="text-3xl font-extrabold" />
+            <Money amount={live.total_amount} className="text-3xl font-extrabold" />
           </div>
         </div>
       </motion.div>
