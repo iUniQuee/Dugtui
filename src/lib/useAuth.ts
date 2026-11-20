@@ -34,16 +34,41 @@ export function useAuth() {
 
   useEffect(() => {
     if (!session?.user) return;
-    const load = () => {
-      supabase
+    const user = session.user;
+    const load = async () => {
+      const { data } = await supabase
         .from('profiles')
         .select('id, display_name, balance, bank_name, account_number, account_name')
-        .eq('id', session.user.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          setProfile((data as Profile) ?? null);
-          setLoading(false);
-        });
+        .eq('id', user.id)
+        .maybeSingle();
+      if (data) {
+        setProfile(data as Profile);
+        setLoading(false);
+        return;
+      }
+      // Шинэ бүртгэлд profiles мөр автоматаар үүсдэггүй тул нэвтэрсэн үед
+      // хэрэглэгчийн нэрээр нээж өгнө (хэтэвч, дансны мэдээлэл үүн дээр ажиллана).
+      const name =
+        ((user.user_metadata?.display_name as string | undefined) ?? '').trim() ||
+        user.email?.split('@')[0] ||
+        'Хэрэглэгч';
+      const { data: created } = await supabase
+        .from('profiles')
+        .insert({ id: user.id, display_name: name })
+        .select('id, display_name, balance, bank_name, account_number, account_name')
+        .maybeSingle();
+      if (created) {
+        setProfile(created as Profile);
+      } else {
+        // зэрэг үүссэн бол дахин уншина
+        const { data: again } = await supabase
+          .from('profiles')
+          .select('id, display_name, balance, bank_name, account_number, account_name')
+          .eq('id', user.id)
+          .maybeSingle();
+        setProfile((again as Profile) ?? null);
+      }
+      setLoading(false);
     };
     load();
   }, [session?.user?.id]);
