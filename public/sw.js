@@ -1,6 +1,6 @@
 /* Dugtui service worker — PWA суулгалт + Web Push мэдэгдэл. */
 
-const ICON = '/icon-192.png';
+const ICON = '/icon-512.png';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
