@@ -1,27 +1,23 @@
 /**
- * Cloudflare Pages Function — QPay Merchant V2 (sandbox/production).
+ * Cloudflare Pages Function — Bogd QPay Merchant V2.
  *
  * АЮУЛГҮЙ БАЙДЛЫН ГОЛ ДҮРЭМ:
- *   QPAY_USERNAME, QPAY_PASSWORD, QPAY_INVOICE_CODE нь ЗӨВХӨН Cloudflare-ийн
- *   environment variables (Secrets) хэлбэрээр энд уншигдана. Эдгээр утга нь
- *   хэзээ ч `VITE_` угтвартай болж browser bundle руу орохгүй, ямар ч хариунд
- *   буцаж явахгүй.
+ *   QPAY_USERNAME, QPAY_PASSWORD, QPAY_INVOICE_CODE, QPAY_CALLBACK_URL нь
+ *   ЗӨВХӨН Cloudflare-ийн environment variables (Secrets) хэлбэрээр энд
+ *   уншигдана. Эдгээр утга нь хэзээ ч `VITE_` угтвартай болж browser bundle
+ *   руу орохгүй, ямар ч хариунд буцаж явахгүй.
  *
  * Route-ууд (frontend `src/lib/qpay.ts`-ээс дуудагдана):
- *   POST /api/qpay/invoice   → QPay нэхэмжлэх үүсгэж QR/deeplink буцаана
- *   GET  /api/qpay/check     → төлбөр баталгаажсан эсэхийг QPay-с шалгана
- *   POST /api/qpay/simulate  → зөвхөн туршилтын (түлхүүргүй) горимд
- *   POST /api/qpay/callback  → QPay-ийн webhook
+ *   POST /api/qpay/invoice   → /v2/invoice: нэхэмжлэх + QR код үүсгэнэ
+ *   GET  /api/qpay/check     → /v2/payment/check: төлбөр баталгаажсан эсэх
+ *   POST /api/qpay/callback  → QPay-ийн webhook: төлбөрийг шалгаад өрөөг PAID болгоно
  *
- * Cloudflare Pages нь төлөв хадгалах сан байхгүй (isolate бүр тусдаа) тул
- * нэхэмжлэхийн төлөвийг энд хадгалахгүй: жинхэнэ горимд QPay-ийн
- * /v2/payment/check хариу эрхтэй, туршилтын горимд simulate шууд буцаана.
+ * Нэмэлт (сонголттой, зөвхөн серверт):
+ *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY — callback/check үед өрөөний
+ *   төлөвийг 'PAID' болгож бичихэд ашиглана.
  */
 
-const DEFAULT_BASE = 'https://merchant-sandbox.qpay.mn';
-
-/** Туршилтын нэхэмжлэхийн id: test_<дүн>_<uuid> (Cloudflare дээр төлөв хадгалахгүй тул дүнг id-д хийнэ). */
-const TEST_INVOICE_ID = /^test_(\d+)_[0-9a-f-]{36}$/i;
+const DEFAULT_BASE = 'https://merchant.qpay.mn';
 
 let tokenCache = null;
 
@@ -50,10 +46,14 @@ function readConfig(env) {
     password: env.QPAY_PASSWORD || '',
     invoiceCode: env.QPAY_INVOICE_CODE || '',
     callbackUrl: env.QPAY_CALLBACK_URL || '',
-    allowSimulate: String(env.ALLOW_SIMULATED_PAYMENT ?? 'true') !== 'false',
     configured: Boolean(env.QPAY_USERNAME && env.QPAY_PASSWORD && env.QPAY_INVOICE_CODE),
+    supabaseUrl: String(env.SUPABASE_URL || '').replace(/\/+$/, ''),
+    supabaseKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
   };
 }
+
+const MISSING_KEYS =
+  'Bogd QPay түлхүүр тохируулаагүй байна. QPAY_USERNAME, QPAY_PASSWORD, QPAY_INVOICE_CODE-г Cloudflare-ийн environment variables (Secrets) дээр нэмнэ үү.';
 
 /* ------------------------------------------------------------------ */
 /* QPay API                                                            */
@@ -121,21 +121,6 @@ async function createRealInvoice(cfg, { amount, description, senderInvoiceNo }) 
     amount,
     qrText: raw.qr_text || '',
     qrImage: raw.qr_image || null,
-    bankLinks: Array.isArray(raw.urls)
-      ? raw.urls.map((u) => ({ name: u.name || 'Банк', link: u.link, logo: u.logo || null }))
-      : [],
-    testMode: false,
-  };
-}
-
-function createTestInvoice({ amount }) {
-  return {
-    invoiceId: `test_${amount}_${crypto.randomUUID()}`,
-    amount,
-    qrText: '',
-    qrImage: null,
-    bankLinks: [],
-    testMode: true,
   };
 }
 
@@ -153,7 +138,36 @@ async function paymentStatus(cfg, invoiceId) {
   const paid = rows.some(
     (r) => String(r.payment_status || '').toUpperCase() === 'PAID'
   );
-  return { paid, paidAmount: Number(data.paid_amount || 0), testMode: false };
+  return { paid, paidAmount: Number(data.paid_amount || 0) };
+}
+
+/**
+ * Төлбөр баталгаажсаны дараа тухайн нэхэмжлэхээр үүссэн өрөөг 'PAID' болгоно.
+ * SUPABASE_SERVICE_ROLE_KEY байхгүй бол чимээгүй алгасна (frontend өөрөө
+ * төлбөр баталгаажсаны дараа өрөөг PAID төлөвтэй үүсгэдэг).
+ */
+async function markRoomPaid(cfg, invoiceId) {
+  if (!cfg.supabaseUrl || !cfg.supabaseKey || !invoiceId) return false;
+  try {
+    const res = await fetch(
+      `${cfg.supabaseUrl}/rest/v1/rooms?qpay_invoice_id=eq.${encodeURIComponent(
+        invoiceId
+      )}&status=neq.CLAIMED`,
+      {
+        method: 'PATCH',
+        headers: {
+          apikey: cfg.supabaseKey,
+          Authorization: `Bearer ${cfg.supabaseKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ status: 'PAID', paid_at: new Date().toISOString() }),
+      }
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -176,7 +190,7 @@ export async function onRequest(context) {
         return jsonResponse({ error: 'Дүн хамгийн багадаа 100₮ байх ёстой.' }, 400);
       }
       if (!cfg.configured) {
-        return jsonResponse(createTestInvoice({ amount }));
+        return jsonResponse({ error: MISSING_KEYS }, 503);
       }
 
       const senderInvoiceNo = String(body.senderInvoiceNo || `GIFT-${Date.now()}`).slice(0, 45);
@@ -186,32 +200,27 @@ export async function onRequest(context) {
     if (route === 'check' && request.method === 'GET') {
       const invoiceId = url.searchParams.get('invoice_id') || '';
       if (!invoiceId) return jsonResponse({ error: 'invoice_id шаардлагатай.' }, 400);
-      if (!cfg.configured || TEST_INVOICE_ID.test(invoiceId)) {
-        return jsonResponse({ paid: false, paidAmount: 0, testMode: true });
+      if (!cfg.configured) {
+        return jsonResponse({ error: MISSING_KEYS }, 503);
       }
-      return jsonResponse(await paymentStatus(cfg, invoiceId));
-    }
-
-    if (route === 'simulate' && request.method === 'POST') {
-      if (!cfg.allowSimulate) {
-        return jsonResponse({ error: 'Туршилтын төлбөр хаагдсан байна.' }, 403);
-      }
-      const body = await readJson(request);
-      const invoiceId = String(body.invoiceId || '');
-      const match = invoiceId.match(TEST_INVOICE_ID);
-      if (!match || cfg.configured) {
-        return jsonResponse(
-          { error: 'Туршилтын төлбөрийг зөвхөн түлхүүргүй туршилтын горимд хийж болно.' },
-          403
-        );
-      }
-      return jsonResponse({ paid: true, paidAmount: Number(match[1]), testMode: true });
+      const status = await paymentStatus(cfg, invoiceId);
+      if (status.paid) await markRoomPaid(cfg, invoiceId);
+      return jsonResponse(status);
     }
 
     if (route === 'callback' && request.method === 'POST') {
-      // Жинхэнэ горимд төлөвийг /v2/payment/check-ээс шалгадаг тул энд зөвхөн хүлээн авна.
-      await readJson(request);
-      return jsonResponse({ accepted: true });
+      const body = await readJson(request);
+      const invoiceId = String(
+        body.invoice_id || body.object_id || url.searchParams.get('invoice_id') || ''
+      );
+      if (!invoiceId || !cfg.configured) {
+        return jsonResponse({ accepted: false, paid: false }, 200);
+      }
+
+      // QPay-ийн мэдэгдлийг сохроор итгэхгүй: /v2/payment/check-ээр баталгаажуулна.
+      const status = await paymentStatus(cfg, invoiceId);
+      if (status.paid) await markRoomPaid(cfg, invoiceId);
+      return jsonResponse({ accepted: true, paid: status.paid });
     }
 
     return jsonResponse({ error: 'API route олдсонгүй.' }, 404);
