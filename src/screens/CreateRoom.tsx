@@ -25,6 +25,7 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
   const [messageTouched, setMessageTouched] = useState(false);
 
   const [showPay, setShowPay] = useState(false);
+  const [roomCode, setRoomCode] = useState('');
   const [paying, setPaying] = useState(false);
   const [created, setCreated] = useState<Room | null>(null);
   const [error, setError] = useState('');
@@ -47,18 +48,22 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
     if (totalNum <= 0) return setError('Зөв мөнгөн дүн оруулна уу.');
     if (mode === 'lucky_draw' && peopleNum <= 0) return setError('Оролцогчдын тоог оруулна уу.');
     setError('');
+    // Кодоо урьдчилан үүсгэнэ: Bogd QPay-ийн sender_invoice_no болон callback
+    // хоёулаа энэ кодыг ашиглаж, төлбөрийг өрөөтэй холбоно.
+    const nextCode = roomCode || generateRoomCode();
+    setRoomCode(nextCode);
     if (isFree) {
-      onQrPaid();
+      void onQrPaid(nextCode);
       return;
     }
     setShowPay(true);
   };
 
-  const onQrPaid = async () => {
+  const onQrPaid = async (codeArg?: string, invoiceId?: string) => {
     if (!session) return;
     setPaying(true);
-    // Төлбөр баталгаажсаны дараа л өрөө идэвхжинэ (QPay check / simulate).
-    const code = generateRoomCode();
+    // Төлбөр баталгаажсаны дараа л өрөө үүснэ (Bogd QPay /v2/payment/check).
+    const code = codeArg || roomCode || generateRoomCode();
     const { data, error: err } = await supabase
       .from('rooms')
       .insert({
@@ -70,8 +75,10 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
         fee_amount: fee,
         participant_count: mode === 'lucky_draw' ? peopleNum : null,
         mode: mode === 'lucky_draw' ? splitMode : null,
-        status: 'active',
+        // Төлбөр баталгаажсан тул PAID; бэлгийг авмагц CLAIMED болно.
+        status: isFree ? 'active' : 'PAID',
         user_id: session.user.id,
+        qpay_invoice_id: invoiceId ?? null,
         expires_at: mode === 'lucky_draw' ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() : null,
         organizer_name: organizerName.trim() || null,
         message: message.trim() || null,
@@ -255,17 +262,18 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
               ? 'Нэвтрээд өрөө үүсгэх'
               : isFree
                 ? 'Үнэгүй үүсгэх'
-                : 'QPay Төлбөр төлөх'}
+                : 'Bogd QPay төлбөр төлөх'}
           </button>
         </div>
       </div>
 
-      {/* QPay төлбөрийн цонх: QR, банкны deeplink, төлбөр шалгах, simulate */}
+      {/* Bogd QPay төлбөрийн цонх: QR код, банкны апп-аар төлөх заавар, төлбөр шалгах */}
       {showPay && (
         <QpayModal
           amount={grand}
           title={title.trim()}
-          onPaid={() => void onQrPaid()}
+          senderInvoiceNo={`GIFT-${roomCode}`}
+          onPaid={(invoiceId) => void onQrPaid(undefined, invoiceId)}
           onClose={() => setShowPay(false)}
         />
       )}
