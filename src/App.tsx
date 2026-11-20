@@ -135,8 +135,21 @@ function App() {
           {authModal}
         </>
       );
-    if (room.type === 'group_pool') return <>{nav}<GroupPoolRoom room={room} /></>;
-    return <>{nav}<GiftCardRoom room={room} /></>;
+    if (room.type === 'group_pool')
+      return (
+        <>
+          {nav}
+          <GroupPoolRoom room={room} />
+          {authModal}
+        </>
+      );
+    return (
+      <>
+        {nav}
+        <GiftCardRoom room={room} />
+        {authModal}
+      </>
+    );
   }
 
   if (view.page === 'create') {
