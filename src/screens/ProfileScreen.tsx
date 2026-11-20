@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Wallet, Gift, Landmark, CheckCircle2, Clock, Settings2, ArrowRight } from 'lucide-react';
+import {
+  Wallet,
+  Gift,
+  Landmark,
+  CheckCircle2,
+  Clock,
+  Settings2,
+  ArrowRight,
+  ShieldCheck,
+} from 'lucide-react';
 import { supabase, type Room, type Envelope, type Withdrawal } from '@/lib/supabase';
 import type { Profile } from '@/lib/useAuth';
 import { Money, Spinner } from '@/components/Shell';
@@ -29,11 +38,15 @@ function statusLabel(status: Room['status']): string {
 export function ProfileScreen({
   profile,
   userId,
+  isAdmin,
+  onAdmin,
   onOpenRoom,
   onLogout,
 }: {
   profile: Profile | null;
   userId: string;
+  isAdmin?: boolean;
+  onAdmin?: () => void;
   onOpenRoom: (code: string) => void;
   onLogout: () => void;
 }) {
@@ -140,6 +153,18 @@ export function ProfileScreen({
     <div className="min-h-screen pb-24">
       <div className="mx-auto max-w-2xl px-4 pt-8">
         <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">Миний профайл</h1>
+
+        {isAdmin && onAdmin && (
+          <button
+            onClick={onAdmin}
+            className="mt-4 w-full flex items-center justify-between rounded-2xl border border-emerald-300 bg-emerald-50 px-5 py-4 text-left hover:bg-emerald-100 transition-colors"
+          >
+            <span className="flex items-center gap-2 font-semibold text-emerald-900">
+              <ShieldCheck className="w-5 h-5" /> Админ самбар
+            </span>
+            <ArrowRight className="w-4 h-4 text-emerald-700" />
+          </button>
+        )}
 
         {/* balance card */}
         <motion.div
