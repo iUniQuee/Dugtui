@@ -4,7 +4,22 @@ import { Wallet, Gift, Landmark, CheckCircle2, Clock, Settings2, ArrowRight } fr
 import { supabase, type Room, type Envelope, type Withdrawal } from '@/lib/supabase';
 import type { Profile } from '@/lib/useAuth';
 import { Money, Spinner } from '@/components/Shell';
-import { formatMNT, themeOf } from '@/lib/utils';
+import { themeOf } from '@/lib/utils';
+
+function statusLabel(status: Room['status']): string {
+  switch (status) {
+    case 'active':
+      return 'Идэвхтэй';
+    case 'PAID':
+      return 'Төлбөр төлөгдсөн';
+    case 'CLAIMED':
+      return 'Хүлээн авсан';
+    case 'pending':
+      return 'Төлбөр хүлээж байна';
+    default:
+      return 'Дууссан';
+  }
+}
 
 export function ProfileScreen({
   profile,
@@ -23,6 +38,8 @@ export function ProfileScreen({
   >([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [winnings, setWinnings] = useState<(Envelope & { room?: Room })[]>([]);
+  const [giftCards, setGiftCards] = useState<Room[]>([]);
+  const [balance, setBalance] = useState(profile?.balance ?? 0);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [bank, setBank] = useState(profile?.bank_name ?? '');
   const [account, setAccount] = useState(profile?.account_number ?? '');
@@ -33,7 +50,7 @@ export function ProfileScreen({
 
   useEffect(() => {
     const run = async () => {
-      const [txRes, roomRes, winRes, wdRes] = await Promise.all([
+      const [txRes, roomRes, winRes, wdRes, giftRes, balRes] = await Promise.all([
         supabase
           .from('wallet_transactions')
           .select('id, amount, type, status, description, created_at')
@@ -47,11 +64,20 @@ export function ProfileScreen({
           .eq('claimed_by', userId)
           .order('claimed_at', { ascending: false }),
         supabase.from('withdrawals').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+        supabase
+          .from('rooms')
+          .select('*')
+          .eq('type', 'gift_card')
+          .eq('claimed_by', userId)
+          .order('claimed_at', { ascending: false }),
+        supabase.from('profiles').select('balance').eq('id', userId).maybeSingle(),
       ]);
       if (txRes.data) setWalletTx(txRes.data as typeof walletTx);
       if (roomRes.data) setRooms(roomRes.data as Room[]);
       if (winRes.data) setWinnings(winRes.data as (Envelope & { room?: Room })[]);
+      if (giftRes.data) setGiftCards(giftRes.data as Room[]);
       if (wdRes.data) setWithdrawals(wdRes.data as Withdrawal[]);
+      if (balRes.data && typeof balRes.data.balance === 'number') setBalance(balRes.data.balance);
       setLoading(false);
     };
     run();
@@ -68,16 +94,16 @@ export function ProfileScreen({
   };
 
   const cashOut = async () => {
-    if (!profile?.balance || profile.balance <= 0) return;
+    if (!balance || balance <= 0) return;
     setCashOutBusy(true);
     const { error } = await supabase.from('wallet_transactions').insert({
       user_id: userId,
-      amount: profile.balance,
+      amount: balance,
       type: 'payout',
       status: 'pending',
-      bank_name: bank.trim() || profile.bank_name,
-      account_number: account.trim() || profile.account_number,
-      account_name: accountName.trim() || profile.account_name,
+      bank_name: bank.trim() || profile?.bank_name,
+      account_number: account.trim() || profile?.account_number,
+      account_name: accountName.trim() || profile?.account_name,
       description: 'Хэтэвчнээс мөнгө татах хүсэлт',
     });
     setCashOutBusy(false);
@@ -111,18 +137,18 @@ export function ProfileScreen({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-85">Миний хэтэвч</p>
-              <Money amount={profile?.balance ?? 0} className="text-4xl font-extrabold" />
+              <Money amount={balance} className="text-4xl font-extrabold" />
             </div>
             <Wallet className="w-10 h-10 opacity-80" />
           </div>
           <button
             onClick={cashOut}
-            disabled={!profile?.balance || profile.balance <= 0 || !!pendingPayout || cashOutBusy}
+            disabled={!balance || balance <= 0 || !!pendingPayout || cashOutBusy}
             className="mt-5 w-full rounded-xl bg-white/15 backdrop-blur border border-white/30 py-2.5 font-semibold hover:bg-white/25 disabled:opacity-50 transition-colors"
           >
             {pendingPayout
               ? 'Татах хүсэлт хүлээгдэж байна'
-              : !profile?.balance || profile.balance <= 0
+              : !balance || balance <= 0
                 ? 'Хэтэвч хоосон байна'
                 : cashOutBusy
                   ? 'Илгээж байна...'
@@ -239,7 +265,7 @@ export function ProfileScreen({
                   <div>
                     <p className="font-medium text-neutral-900">{r.title}</p>
                     <p className="text-xs text-neutral-400 mt-0.5">
-                      {themeOf(r.theme).label} · {r.status === 'active' ? 'Идэвхтэй' : 'Дууссан'}
+                      {themeOf(r.theme).label} · {statusLabel(r.status)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -254,7 +280,25 @@ export function ProfileScreen({
 
         {tab === 'winnings' && (
           <div className="mt-5 space-y-3">
-            {winnings.length === 0 ? (
+            {giftCards.map((g) => (
+              <div
+                key={g.id}
+                className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-white px-5 py-4"
+              >
+                <div>
+                  <p className="font-medium text-neutral-900 flex items-center gap-1.5">
+                    <Gift className="w-4 h-4 text-red-500" /> {g.title}
+                  </p>
+                  {g.claimed_at && (
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {new Date(g.claimed_at).toLocaleDateString('mn-MN')} · Бэлгийн карт
+                    </p>
+                  )}
+                </div>
+                <Money amount={g.total_amount} className="font-bold text-emerald-600" />
+              </div>
+            ))}
+            {winnings.length === 0 && giftCards.length === 0 ? (
               <p className="text-sm text-neutral-400">Одоогоор бэлэг хожоогүй байна.</p>
             ) : (
               winnings.map((w) => (
