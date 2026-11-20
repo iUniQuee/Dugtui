@@ -1,15 +1,19 @@
-import { Gift, LogOut, UserRound } from 'lucide-react';
+import { Gift, LogOut, ShieldCheck, UserRound } from 'lucide-react';
 
 export function Header({
   onCreate,
   userName,
+  isAdmin,
   onProfile,
+  onAdmin,
   onAuth,
   onSignOut,
 }: {
   onCreate?: () => void;
   userName?: string | null;
+  isAdmin?: boolean;
   onProfile?: () => void;
+  onAdmin?: () => void;
   onAuth?: (tab: 'login' | 'signup') => void;
   onSignOut?: () => void;
 }) {
@@ -34,6 +38,15 @@ export function Header({
           )}
           {userName ? (
             <>
+              {isAdmin && onAdmin && (
+                <button
+                  onClick={onAdmin}
+                  className="flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs sm:text-sm font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Админ самбар
+                </button>
+              )}
               <button
                 onClick={onProfile}
                 className="flex items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-3.5 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 transition-colors"
