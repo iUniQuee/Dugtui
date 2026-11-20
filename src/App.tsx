@@ -146,7 +146,15 @@ function App() {
     return (
       <>
         {nav}
-        <GiftCardRoom room={room} />
+        <GiftCardRoom
+          room={room}
+          onNeedAuth={() => setAuthTab('signup')}
+          onWallet={() => {
+            window.location.hash = '#profile';
+            setView({ page: 'profile' });
+          }}
+          onClaimed={(claimed) => setRoom(claimed)}
+        />
         {authModal}
       </>
     );
