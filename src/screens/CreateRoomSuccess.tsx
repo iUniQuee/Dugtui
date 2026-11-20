@@ -1,10 +1,10 @@
 import { motion } from 'framer-motion';
-import { Check, Copy, PartyPopper, Sparkles } from 'lucide-react';
+import { Check, Clock, Copy, PartyPopper, Sparkles } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { GiftBg } from '@/components/Shell';
 import type { Room } from '@/lib/supabase';
 
-/** Өрөө амжилттай үүссэний дарагх дэлгэц: код, хуваалцах линк, QR. */
+/** Өрөө амжилттай үүссэний дараах дэлгэц: код, хуваалцах линк, QR. */
 export function CreateRoomSuccess({
   room,
   shareUrl,
@@ -48,6 +48,18 @@ export function CreateRoomSuccess({
           <div className="mt-4 flex justify-center rounded-2xl border-4 border-neutral-900 p-4 w-fit mx-auto bg-white">
             <QRCodeSVG value={shareUrl} size={180} />
           </div>
+          {room.status === 'PENDING_APPROVAL' && (
+            <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold flex items-center gap-1.5">
+                <Clock className="w-4 h-4" /> Төлбөр админы шалгалтад байна
+              </p>
+              <p className="mt-1 text-xs leading-relaxed">
+                Гүйлгээний утга: <span className="font-mono font-bold">{room.payment_code}</span>.
+                Админ баталгаажуулмагц энэ линкээр орсон хүн бэлгээ хэтэвчиндээ авна.
+              </p>
+            </div>
+          )}
+
           <div className="mt-4 flex gap-2">
             <button
               onClick={onCopy}
