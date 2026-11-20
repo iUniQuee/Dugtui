@@ -35,11 +35,19 @@ function App() {
   const [loading, setLoading] = useState(view.page === 'room');
   const [notFound, setNotFound] = useState(false);
   const [authTab, setAuthTab] = useState<'login' | 'signup' | null>(null);
-  const { session, profile, signOut } = useAuth();
+  const { session, profile, isAdmin, signOut } = useAuth();
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [view]);
+
+  // Хэрэглэгч хаягийн мөрөнд #admin / #profile гэж бичих, back/forward
+  // дарахад ч зөв дэлгэц нээгдэхээр hash-ыг сонсоно.
+  useEffect(() => {
+    const onHashChange = () => setView(getView());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     if (view.page !== 'room') {
@@ -69,9 +77,14 @@ function App() {
     <Header
       onCreate={() => setView({ page: 'create' })}
       userName={session ? profile?.display_name || 'Профайл' : null}
+      isAdmin={isAdmin}
       onProfile={() => {
         window.location.hash = '#profile';
         setView({ page: 'profile' });
+      }}
+      onAdmin={() => {
+        window.location.hash = '#admin';
+        setView({ page: 'admin' });
       }}
       onAuth={(tab) => setAuthTab(tab)}
       onSignOut={() => {
@@ -102,6 +115,11 @@ function App() {
         <ProfileScreen
           profile={profile}
           userId={session.user.id}
+          isAdmin={isAdmin}
+          onAdmin={() => {
+            window.location.hash = '#admin';
+            setView({ page: 'admin' });
+          }}
           onOpenRoom={(code) => setView({ page: 'room', code })}
           onLogout={() => {
             signOut();
