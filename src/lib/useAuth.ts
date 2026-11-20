@@ -14,6 +14,7 @@ export interface Profile {
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -73,7 +74,29 @@ export function useAuth() {
     load();
   }, [session?.user?.id]);
 
+  // Админ эрх нь сервер талд (is_admin RPC) шалгагдана.
+  useEffect(() => {
+    if (!session?.user) {
+      setIsAdmin(false);
+      return;
+    }
+    let active = true;
+    supabase.rpc('is_admin').then(({ data }) => {
+      if (active) setIsAdmin(data === true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [session?.user?.id]);
+
   const signOut = () => supabase.auth.signOut();
 
-  return { session, user: session?.user as User | undefined, profile, loading, signOut };
+  return {
+    session,
+    user: session?.user as User | undefined,
+    profile,
+    isAdmin,
+    loading,
+    signOut,
+  };
 }
