@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { ArrowLeft, CreditCard, ImagePlus as ImageIcon, Sparkles } from 'lucide-react';
 import { supabase, type Room } from '@/lib/supabase';
 import { GiftBg, Money } from '@/components/Shell';
-import { QpayModal } from '@/components/QpayModal';
+import { BankTransferModal } from '@/components/BankTransferModal';
+import { generatePaymentCode } from '@/lib/payments';
+import { notifyAdmin } from '@/lib/push';
 import { CreateRoomSuccess } from '@/screens/CreateRoomSuccess';
 import { CreateRoomModeTheme, MODE_LABELS, type Mode } from '@/screens/CreateRoomModeTheme';
 import { CreateRoomFeeSummary } from '@/screens/CreateRoomFeeSummary';
@@ -26,6 +28,7 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
 
   const [showPay, setShowPay] = useState(false);
   const [roomCode, setRoomCode] = useState('');
+  const [paymentCode, setPaymentCode] = useState('');
   const [paying, setPaying] = useState(false);
   const [created, setCreated] = useState<Room | null>(null);
   const [error, setError] = useState('');
@@ -48,55 +51,72 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
     if (totalNum <= 0) return setError('Зөв мөнгөн дүн оруулна уу.');
     if (mode === 'lucky_draw' && peopleNum <= 0) return setError('Оролцогчдын тоог оруулна уу.');
     setError('');
-    // Кодоо урьдчилан үүсгэнэ: Bogd QPay-ийн sender_invoice_no болон callback
-    // хоёулаа энэ кодыг ашиглаж, төлбөрийг өрөөтэй холбоно.
-    const nextCode = roomCode || generateRoomCode();
-    setRoomCode(nextCode);
+    // Өрөөний код болон гүйлгээний утга (6 орон) урьдчилан үүснэ.
+    setRoomCode((prev) => prev || generateRoomCode());
+    setPaymentCode((prev) => prev || generatePaymentCode());
     if (isFree) {
-      void onQrPaid(nextCode);
+      void submitRoom();
       return;
     }
     setShowPay(true);
   };
 
-  const onQrPaid = async (codeArg?: string, invoiceId?: string) => {
+  const submitRoom = async (codeArg?: string) => {
     if (!session) return;
     setPaying(true);
-    // Төлбөр баталгаажсаны дараа л өрөө үүснэ (Bogd QPay /v2/payment/check).
-    const code = codeArg || roomCode || generateRoomCode();
-    const { data, error: err } = await supabase
-      .from('rooms')
-      .insert({
-        code,
-        type: mode,
-        title: title.trim(),
-        theme,
-        total_amount: totalNum,
-        fee_amount: fee,
-        participant_count: mode === 'lucky_draw' ? peopleNum : null,
-        mode: mode === 'lucky_draw' ? splitMode : null,
-        // Төлбөр баталгаажсан тул PAID; бэлгийг авмагц CLAIMED болно.
-        status: isFree ? 'active' : 'PAID',
-        user_id: session.user.id,
-        qpay_invoice_id: invoiceId ?? null,
-        expires_at: mode === 'lucky_draw' ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() : null,
-        organizer_name: organizerName.trim() || null,
-        message: message.trim() || null,
-        image_url: imageUrl.trim() || null,
-      })
-      .select()
-      .single();
-    if (err || !data) {
+    setError('');
+
+    // Код давхцвал (unique constraint) шинэ кодоор дахин оролдоно.
+    let room: Room | null = null;
+    let failure = 'Өрөө үүсгэхэд алдаа гарлаа. Дахин оролдоорой.';
+    for (let attempt = 0; attempt < 3 && !room; attempt += 1) {
+      const code =
+        attempt === 0 ? codeArg || roomCode || generateRoomCode() : generateRoomCode();
+      const pcode =
+        attempt === 0 ? paymentCode || generatePaymentCode() : generatePaymentCode();
+      const { data, error: err } = await supabase
+        .from('rooms')
+        .insert({
+          code,
+          type: mode,
+          title: title.trim(),
+          theme,
+          total_amount: totalNum,
+          fee_amount: fee,
+          participant_count: mode === 'lucky_draw' ? peopleNum : null,
+          mode: mode === 'lucky_draw' ? splitMode : null,
+          // Админ шилжүүлгийг шалгаж батлах хүртэл PENDING_APPROVAL.
+          status: isFree ? 'active' : 'PENDING_APPROVAL',
+          payment_code: isFree ? null : pcode,
+          user_id: session.user.id,
+          expires_at:
+            mode === 'lucky_draw'
+              ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+              : null,
+          organizer_name: organizerName.trim() || null,
+          message: message.trim() || null,
+          image_url: imageUrl.trim() || null,
+        })
+        .select()
+        .single();
+      if (data) room = data as Room;
+      else if (err?.code !== '23505') failure = `Алдаа: ${err?.message ?? 'тодорхойгүй'}`;
+    }
+
+    if (!room) {
       setPaying(false);
-      setError('Өрөө үүсгэхэд алдаа гарлаа. Дахин оролдоорэй.');
-      setShowPay(false);
+      setError(failure);
       return;
     }
-    const room = data as Room;
+
     if (mode === 'lucky_draw') {
       const amounts = splitAmount(totalNum, peopleNum, splitMode);
       await supabase.from('envelopes').insert(amounts.map((a) => ({ room_id: room.id, amount: a })));
     }
+
+    // Админы утас руу шууд push мэдэгдэл.
+    if (!isFree) void notifyAdmin({ kind: 'payment', roomId: room.id });
+
     setPaying(false);
     setCreated(room);
     setShowPay(false);
@@ -146,7 +166,7 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
           Өрөө үүсгэх
         </h1>
         <p className="mt-1 text-sm text-neutral-500">
-          Мэдээнүүдээ бөглөөд QPay-аар төлбөр төлснөөр линк үүснэ.
+          Мэдээнүүдээ бөглөөд Богд банкны QR-аар төлбөр шилжүүлсний дараа линк үүснэ.
         </p>
 
         <div className="mt-6 space-y-5">
@@ -262,18 +282,20 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
               ? 'Нэвтрээд өрөө үүсгэх'
               : isFree
                 ? 'Үнэгүй үүсгэх'
-                : 'Bogd QPay төлбөр төлөх'}
+                : 'Банкны QR-аар төлөх'}
           </button>
         </div>
       </div>
 
-      {/* Bogd QPay төлбөрийн цонх: QR код, банкны апп-аар төлөх заавар, төлбөр шалгах */}
+      {/* Богд банкны QR + дансны мэдээлэл + 6 оронтой гүйлгээний утга */}
       {showPay && (
-        <QpayModal
+        <BankTransferModal
           amount={grand}
           title={title.trim()}
-          senderInvoiceNo={`GIFT-${roomCode}`}
-          onPaid={(invoiceId) => void onQrPaid(undefined, invoiceId)}
+          paymentCode={paymentCode}
+          busy={paying}
+          error={error}
+          onSubmitted={() => void submitRoom()}
           onClose={() => setShowPay(false)}
         />
       )}
