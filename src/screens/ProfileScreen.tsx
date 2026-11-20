@@ -5,13 +5,18 @@ import { supabase, type Room, type Envelope, type Withdrawal } from '@/lib/supab
 import type { Profile } from '@/lib/useAuth';
 import { Money, Spinner } from '@/components/Shell';
 import { themeOf } from '@/lib/utils';
+import { notifyAdmin } from '@/lib/push';
 
 function statusLabel(status: Room['status']): string {
   switch (status) {
     case 'active':
       return 'Идэвхтэй';
+    case 'PENDING_APPROVAL':
+      return 'Төлбөр шалгагдаж байна';
     case 'PAID':
-      return 'Төлбөр төлөгдсөн';
+      return 'Төлбөр батлагдсан';
+    case 'REJECTED':
+      return 'Татгалзсан';
     case 'CLAIMED':
       return 'Хүлээн авсан';
     case 'pending':
@@ -47,6 +52,7 @@ export function ProfileScreen({
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [cashOutBusy, setCashOutBusy] = useState(false);
+  const [cashOutNotice, setCashOutNotice] = useState('');
 
   useEffect(() => {
     const run = async () => {
@@ -96,6 +102,7 @@ export function ProfileScreen({
   const cashOut = async () => {
     if (!balance || balance <= 0) return;
     setCashOutBusy(true);
+    setCashOutNotice('');
     const { error } = await supabase.from('wallet_transactions').insert({
       user_id: userId,
       amount: balance,
@@ -107,7 +114,13 @@ export function ProfileScreen({
       description: 'Хэтэвчнээс мөнгө татах хүсэлт',
     });
     setCashOutBusy(false);
-    if (!error) {
+    if (error) {
+      setCashOutNotice('Хүсэлт илгээж чадсангүй: ' + error.message);
+      return;
+    }
+    // Админы утсанд push мэдэгдэл илгээнэ.
+    void notifyAdmin({ kind: 'withdrawal', amount: balance });
+    {
       // refresh wallet ledger + balance display happens on next profile load
       const { data } = await supabase
         .from('wallet_transactions')
@@ -154,6 +167,9 @@ export function ProfileScreen({
                   ? 'Илгээж байна...'
                   : 'Мөнгө татах хүсэлт илгээх'}
           </button>
+          {cashOutNotice && (
+            <p className="mt-2 text-xs text-white/90">{cashOutNotice}</p>
+          )}
         </motion.div>
 
         {/* tabs */}
