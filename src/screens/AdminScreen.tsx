@@ -32,7 +32,7 @@ interface PayoutRow {
   profile?: { display_name: string } | null;
 }
 
-type Tab = 'income' | 'withdrawals' | 'settings';
+type Tab = 'income' | 'withdrawals';
 
 export function AdminScreen() {
   const { session } = useAuth();
@@ -57,6 +57,7 @@ export function AdminScreen() {
   const [uploadingQr, setUploadingQr] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState('');
 
+  const [isAdminError, setIsAdminError] = useState<string | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushMessage, setPushMessage] = useState('');
 
@@ -99,6 +100,8 @@ export function AdminScreen() {
   useEffect(() => {
     const run = async () => {
       const admin = await supabase.rpc('is_admin');
+      // Функц/эрх дутуу бол (SQL ажиллаагүй) алдааг нь харуулна.
+      if (admin.error) setIsAdminError(admin.error.message);
       const adminFlag = admin.data === true;
       setIsAdmin(adminFlag);
       if (!adminFlag) {
@@ -200,6 +203,21 @@ export function AdminScreen() {
         <p className="mt-1 text-sm text-neutral-500">
           Энэ хуудас руу хандах эрх таны бүртгэлд байхгүй байна.
         </p>
+        {isAdminError ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-xs text-amber-900">
+            <p className="font-semibold">Supabase функц ажиллахгүй байна:</p>
+            <p className="mt-1 break-words font-mono">{isAdminError}</p>
+            <p className="mt-2">
+              <b>supabase/migrations/20261120160000_admin_access_and_payment_columns.sql</b>{' '}
+              файлыг Supabase → SQL Editor дээр ажиллуулна уу.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-neutral-400">
+            Админ эрх авахын тулд migration файлын «1-Р АЛХАМ» хэсгийн SQL-ийг
+            өөрийн email-ээр ажиллуулна уу.
+          </p>
+        )}
       </div>
     );
 
@@ -209,6 +227,93 @@ export function AdminScreen() {
         <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900 flex items-center gap-2">
           <ShieldCheck className="w-6 h-6 text-emerald-600" /> Админ самбар
         </h1>
+
+        {/* Данс ба QR тохиргоо — самбар нээгдэхэд хамгийн эхэнд харагдана */}
+        {/* bank settings */}
+          <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+            <div>
+              <h2 className="font-semibold text-neutral-900 flex items-center gap-2">
+                <Landmark className="w-5 h-5" /> Хүлээн авах данс ба QR
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Төлбөрийн цонх дээр эдгээр мэдээлэл харагдана.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-3 gap-2">
+              <label className="block">
+                <span className="text-xs text-neutral-500">Банк</span>
+                <input
+                  value={bank.bank_name}
+                  onChange={(e) => setBank({ ...bank, bank_name: e.target.value })}
+                  placeholder="Богд банк"
+                  className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs text-neutral-500">Дансны дугаар</span>
+                <input
+                  value={bank.account_number}
+                  onChange={(e) => setBank({ ...bank, account_number: e.target.value })}
+                  placeholder="5000 1234 5678"
+                  className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs text-neutral-500">Хүлээн авагчийн нэр</span>
+                <input
+                  value={bank.account_name}
+                  onChange={(e) => setBank({ ...bank, account_name: e.target.value })}
+                  placeholder="Овог Нэр"
+                  className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 items-start">
+              <div className="rounded-2xl border border-neutral-200 p-2 bg-white">
+                <img
+                  src={bank.qr_url || DEFAULT_BANK_SETTINGS.qr_url}
+                  alt="Богд банкны QR"
+                  className="w-40 h-40 object-contain"
+                />
+              </div>
+              <div className="flex-1 space-y-2">
+                <label className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-700 cursor-pointer hover:bg-neutral-50">
+                  <ImagePlus className="w-4 h-4" />
+                  {uploadingQr ? 'Хуулж байна...' : 'QR зураг солих'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => void uploadQr(e.target.files?.[0])}
+                  />
+                </label>
+                <input
+                  value={bank.qr_url}
+                  onChange={(e) => setBank({ ...bank, qr_url: e.target.value })}
+                  placeholder="/qr.png эсвэл https://..."
+                  className="w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-xs text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+                <p className="text-xs text-neutral-400">
+                  Зургийг хуулсны дараа «Хадгалах» дарна уу. Хоосон бол /qr.png ашиглана.
+                </p>
+              </div>
+            </div>
+
+            {settingsMessage && (
+              <p className="text-sm text-neutral-700">{settingsMessage}</p>
+            )}
+
+            <button
+              onClick={() => void saveSettings()}
+              disabled={savingBank}
+              className="rounded-xl bg-neutral-900 text-white px-5 py-2.5 text-sm font-semibold hover:bg-neutral-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+            >
+              {savingBank ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Хадгалах
+            </button>
+          </div>
 
         {/* push notification */}
         <div className="mt-5 rounded-2xl border border-neutral-200 bg-white p-5">
@@ -245,12 +350,11 @@ export function AdminScreen() {
         </div>
 
         {/* tabs */}
-        <div className="mt-6 grid grid-cols-3 gap-2 p-1 bg-neutral-100 rounded-xl">
+        <div className="mt-6 grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl">
           {(
             [
               ['income', 'Орлогын баталгаажуулалт'],
               ['withdrawals', 'Мөнгө татах хүсэлтүүд'],
-              ['settings', 'Тохиргоо'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -381,93 +485,6 @@ export function AdminScreen() {
           </div>
         )}
 
-        {/* settings */}
-        {tab === 'settings' && (
-          <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
-            <div>
-              <h2 className="font-semibold text-neutral-900 flex items-center gap-2">
-                <Landmark className="w-5 h-5" /> Хүлээн авах данс ба QR
-              </h2>
-              <p className="mt-1 text-sm text-neutral-500">
-                Төлбөрийн цонх дээр эдгээр мэдээлэл харагдана.
-              </p>
-            </div>
-
-            <div className="grid sm:grid-cols-3 gap-2">
-              <label className="block">
-                <span className="text-xs text-neutral-500">Банк</span>
-                <input
-                  value={bank.bank_name}
-                  onChange={(e) => setBank({ ...bank, bank_name: e.target.value })}
-                  placeholder="Богд банк"
-                  className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs text-neutral-500">Дансны дугаар</span>
-                <input
-                  value={bank.account_number}
-                  onChange={(e) => setBank({ ...bank, account_number: e.target.value })}
-                  placeholder="5000 1234 5678"
-                  className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs text-neutral-500">Хүлээн авагчийн нэр</span>
-                <input
-                  value={bank.account_name}
-                  onChange={(e) => setBank({ ...bank, account_name: e.target.value })}
-                  placeholder="Овог Нэр"
-                  className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-              </label>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4 items-start">
-              <div className="rounded-2xl border border-neutral-200 p-2 bg-white">
-                <img
-                  src={bank.qr_url || DEFAULT_BANK_SETTINGS.qr_url}
-                  alt="Богд банкны QR"
-                  className="w-40 h-40 object-contain"
-                />
-              </div>
-              <div className="flex-1 space-y-2">
-                <label className="inline-flex items-center gap-2 rounded-xl border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-700 cursor-pointer hover:bg-neutral-50">
-                  <ImagePlus className="w-4 h-4" />
-                  {uploadingQr ? 'Хуулж байна...' : 'QR зураг солих'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => void uploadQr(e.target.files?.[0])}
-                  />
-                </label>
-                <input
-                  value={bank.qr_url}
-                  onChange={(e) => setBank({ ...bank, qr_url: e.target.value })}
-                  placeholder="/qr.png эсвэл https://..."
-                  className="w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-xs text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-                />
-                <p className="text-xs text-neutral-400">
-                  Зургийг хуулсны дараа «Хадгалах» дарна уу. Хоосон бол /qr.png ашиглана.
-                </p>
-              </div>
-            </div>
-
-            {settingsMessage && (
-              <p className="text-sm text-neutral-700">{settingsMessage}</p>
-            )}
-
-            <button
-              onClick={() => void saveSettings()}
-              disabled={savingBank}
-              className="rounded-xl bg-neutral-900 text-white px-5 py-2.5 text-sm font-semibold hover:bg-neutral-700 disabled:opacity-50 transition-colors flex items-center gap-2"
-            >
-              {savingBank ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              Хадгалах
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
