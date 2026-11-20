@@ -15,7 +15,11 @@ export interface Room {
   fee_amount: number;
   participant_count: number | null;
   mode: 'equal' | 'random' | null;
-  status: 'pending' | 'active' | 'completed';
+  status: 'pending' | 'active' | 'completed' | 'PAID' | 'CLAIMED';
+  claimed_by: string | null;
+  claimed_at: string | null;
+  paid_at: string | null;
+  qpay_invoice_id: string | null;
   organizer_name: string | null;
   message: string | null;
   image_url: string | null;
