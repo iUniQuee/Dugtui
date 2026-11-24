@@ -13,11 +13,21 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
-import { supabase, type Room } from '@/lib/supabase';
+import {
+  supabase,
+  type Contribution,
+  type GiftTransfer,
+  type Room,
+} from '@/lib/supabase';
 import { Money, Spinner } from '@/components/Shell';
 import { FEE_RATE, formatMNT } from '@/lib/utils';
 import { useAuth } from '@/lib/useAuth';
-import { DEFAULT_BANK_SETTINGS, loadBankSettings, saveBankSettings } from '@/lib/payments';
+import {
+  DEFAULT_BANK_SETTINGS,
+  formatAccountNumber,
+  loadBankSettings,
+  saveBankSettings,
+} from '@/lib/payments';
 import { enableAdminPush, pushPermission } from '@/lib/push';
 
 interface PayoutRow {
@@ -32,7 +42,15 @@ interface PayoutRow {
   profile?: { display_name: string } | null;
 }
 
-type Tab = 'income' | 'withdrawals';
+interface ContributionRow extends Contribution {
+  room?: { title: string; code: string } | null;
+}
+
+interface TransferRow extends GiftTransfer {
+  room?: { title: string; code: string; status: string } | null;
+}
+
+type Tab = 'income' | 'contributions' | 'transfers' | 'withdrawals';
 
 export function AdminScreen() {
   const { session } = useAuth();
@@ -41,6 +59,8 @@ export function AdminScreen() {
   const [tab, setTab] = useState<Tab>('income');
 
   const [pendingRooms, setPendingRooms] = useState<Room[]>([]);
+  const [contributions, setContributions] = useState<ContributionRow[]>([]);
+  const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
   const [stats, setStats] = useState({
     roomCount: 0,
@@ -62,23 +82,36 @@ export function AdminScreen() {
   const [pushMessage, setPushMessage] = useState('');
 
   const loadAdminData = useCallback(async () => {
-    const [pendingRes, payoutRes, roomsRes, profilesRes] = await Promise.all([
-      supabase
-        .from('rooms')
-        .select('*')
-        .eq('status', 'PENDING_APPROVAL')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('wallet_transactions')
-        .select('*, profile:profiles(display_name)')
-        .eq('type', 'payout')
-        .order('created_at', { ascending: false })
-        .limit(50),
-      supabase.from('rooms').select('total_amount, fee_amount, created_at, status'),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }),
-    ]);
+    const [pendingRes, contribRes, transferRes, payoutRes, roomsRes, profilesRes] =
+      await Promise.all([
+        supabase
+          .from('rooms')
+          .select('*')
+          .eq('status', 'PENDING_APPROVAL')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('contributions')
+          .select('*, room:rooms(title, code)')
+          .eq('status', 'PENDING_APPROVAL')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('gift_transfers')
+          .select('*, room:rooms(title, code, status)')
+          .order('created_at', { ascending: false })
+          .limit(50),
+        supabase
+          .from('wallet_transactions')
+          .select('*, profile:profiles(display_name)')
+          .eq('type', 'payout')
+          .order('created_at', { ascending: false })
+          .limit(50),
+        supabase.from('rooms').select('total_amount, fee_amount, created_at, status'),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+      ]);
 
     if (pendingRes.data) setPendingRooms(pendingRes.data as Room[]);
+    if (contribRes.data) setContributions(contribRes.data as ContributionRow[]);
+    if (transferRes.data) setTransfers(transferRes.data as TransferRow[]);
     if (payoutRes.data) setPayouts(payoutRes.data as PayoutRow[]);
     if (roomsRes.data) {
       const today = new Date().toDateString();
@@ -99,7 +132,7 @@ export function AdminScreen() {
 
   useEffect(() => {
     const run = async () => {
-      // Нэвтрээгүй (anon) үed is_admin руу хандах эрхгүй тул RPC дуудахгүй.
+      // Нэвтрээгүй (anon) үед is_admin руу хандах эрхгүй тул RPC дуудахгүй.
       if (!session) {
         setIsAdmin(false);
         setLoading(false);
@@ -126,6 +159,32 @@ export function AdminScreen() {
     void run();
   }, [loadAdminData, session]);
 
+  // Шинэ нэмэр, дансны хүсэлт ирэхэд самбарыг автоматаар шинэчилнэ.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const channel = supabase
+      .channel('admin-live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contributions' },
+        () => void loadAdminData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'gift_transfers' },
+        () => void loadAdminData()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'rooms' },
+        () => void loadAdminData()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAdmin, loadAdminData]);
+
   const reviewRoom = async (roomId: string, approve: boolean) => {
     setBusyId(roomId);
     setNotice('');
@@ -140,6 +199,44 @@ export function AdminScreen() {
     }
     setPendingRooms((rooms) => rooms.filter((r) => r.id !== roomId));
     setNotice(approve ? 'Төлбөр батлагдлаа. Бэлэг идэвхжлээ.' : 'Төлбөр татгалзагдлаа.');
+    void loadAdminData();
+  };
+
+  const reviewContribution = async (id: string, approve: boolean) => {
+    setBusyId(id);
+    setNotice('');
+    const { error } = await supabase.rpc('admin_review_contribution', {
+      p_id: id,
+      p_approve: approve,
+      p_reason: null,
+    });
+    setBusyId(null);
+    if (error) {
+      setNotice(error.message);
+      return;
+    }
+    setContributions((rows) => rows.filter((r) => r.id !== id));
+    setNotice(
+      approve
+        ? 'Нэмэр батлагдлаа. «Цугласан дүн» болон оролцогчдын жагсаалтад нэмэгдлээ.'
+        : 'Нэмэр татгалзагдлаа.'
+    );
+    void loadAdminData();
+  };
+
+  const completeTransfer = async (id: string) => {
+    setBusyId(id);
+    setNotice('');
+    const { error } = await supabase.rpc('admin_complete_gift_transfer', { p_id: id });
+    setBusyId(null);
+    if (error) {
+      setNotice(error.message);
+      return;
+    }
+    setTransfers((rows) =>
+      rows.map((r) => (r.id === id ? { ...r, status: 'paid', paid_at: new Date().toISOString() } : r))
+    );
+    setNotice('Бэлэг шилжигдлээ. Хамтын бэлгийн өрөө «Хүргэгдсэн (Completed)» боллоо.');
     void loadAdminData();
   };
 
@@ -359,28 +456,40 @@ export function AdminScreen() {
         </div>
 
         {/* tabs */}
-        <div className="mt-6 grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl">
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2 p-1 bg-neutral-100 rounded-xl">
           {(
             [
-              ['income', 'Орлогын баталгаажуулалт'],
-              ['withdrawals', 'Мөнгө татах хүсэлтүүд'],
+              ['income', 'Өрөөний төлбөр'],
+              ['contributions', 'Хамтын бэлэг'],
+              ['transfers', 'Бэлэг шилжүүлэх'],
+              ['withdrawals', 'Мөнгө татах'],
             ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`rounded-lg py-2 text-xs sm:text-sm font-medium transition-colors ${
-                tab === id ? 'bg-white shadow text-neutral-900' : 'text-neutral-500'
-              }`}
-            >
-              {label}
-              {id === 'income' && pendingRooms.length > 0 && (
-                <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] px-1.5">
-                  {pendingRooms.length}
-                </span>
-              )}
-            </button>
-          ))}
+          ).map(([id, label]) => {
+            const badge =
+              id === 'income'
+                ? pendingRooms.length
+                : id === 'contributions'
+                  ? contributions.length
+                  : id === 'transfers'
+                    ? transfers.filter((t) => t.status === 'pending').length
+                    : 0;
+            return (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                className={`rounded-lg py-2 text-xs sm:text-sm font-medium transition-colors ${
+                  tab === id ? 'bg-white shadow text-neutral-900' : 'text-neutral-500'
+                }`}
+              >
+                {label}
+                {badge > 0 && (
+                  <span className="ml-1 inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] px-1.5">
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {notice && (
@@ -440,6 +549,116 @@ export function AdminScreen() {
                       <XCircle className="w-4 h-4" /> Татгалзах
                     </button>
                   </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* contributions — хамтын бэлгийн нэмэр */}
+        {tab === 'contributions' && (
+          <div className="mt-4 space-y-3">
+            {contributions.length === 0 ? (
+              <p className="text-sm text-neutral-400">Шалгах нэмэр байхгүй.</p>
+            ) : (
+              contributions.map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded-2xl border border-neutral-200 bg-white p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-neutral-900">
+                      {c.name}
+                      <Money amount={c.amount} className="ml-2 text-emerald-600" />
+                    </p>
+                    <p className="text-sm text-neutral-600 mt-0.5">
+                      {c.room?.title ?? 'Хамтын бэлэг'} · Гүйлгээний утга:{' '}
+                      <span className="font-mono font-bold tracking-widest text-neutral-900">
+                        {c.payment_code ?? '—'}
+                      </span>
+                    </p>
+                    {c.message && (
+                      <p className="text-sm text-neutral-500 mt-0.5 italic">“{c.message}”</p>
+                    )}
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {new Date(c.created_at).toLocaleString('mn-MN')}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      onClick={() => void reviewContribution(c.id, true)}
+                      disabled={busyId === c.id}
+                      className="rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                    >
+                      {busyId === c.id ? (
+                        <Clock className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4" />
+                      )}
+                      Баталгаажуулах
+                    </button>
+                    <button
+                      onClick={() => void reviewContribution(c.id, false)}
+                      disabled={busyId === c.id}
+                      className="rounded-xl border border-red-200 text-red-600 px-4 py-2.5 text-sm font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                    >
+                      <XCircle className="w-4 h-4" /> Татгалзах
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* transfers — хүлээн авагчийн дансны хүсэлт */}
+        {tab === 'transfers' && (
+          <div className="mt-4 space-y-3">
+            {transfers.length === 0 ? (
+              <p className="text-sm text-neutral-400">Бэлэг шилжүүлэх хүсэлт байхгүй.</p>
+            ) : (
+              transfers.map((t) => (
+                <div
+                  key={t.id}
+                  className="rounded-2xl border border-neutral-200 bg-white p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-neutral-900">
+                      {t.room?.title ?? 'Хамтын бэлэг'}
+                      <Money amount={t.amount} className="ml-2 text-emerald-600" />
+                    </p>
+                    <p className="text-sm text-neutral-600 mt-0.5">
+                      {t.bank_name} ·{' '}
+                      <span className="font-mono">{formatAccountNumber(t.account_number)}</span>
+                    </p>
+                    <p className="text-sm text-neutral-600 mt-0.5">
+                      Хүлээн авагч: <span className="font-medium">{t.account_name}</span>
+                    </p>
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {new Date(t.created_at).toLocaleString('mn-MN')}
+                      {t.status === 'paid' && t.paid_at
+                        ? ` · Шилжсэн: ${new Date(t.paid_at).toLocaleString('mn-MN')}`
+                        : ''}
+                    </p>
+                  </div>
+                  {t.status === 'pending' ? (
+                    <button
+                      onClick={() => void completeTransfer(t.id)}
+                      disabled={busyId === t.id}
+                      className="shrink-0 rounded-xl bg-emerald-600 text-white px-5 py-2.5 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                    >
+                      {busyId === t.id ? (
+                        <Clock className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4" />
+                      )}
+                      Шилжүүлсэн
+                    </button>
+                  ) : (
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-3 py-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Шилжсэн
+                    </span>
+                  )}
                 </div>
               ))
             )}
