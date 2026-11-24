@@ -15,7 +15,11 @@ import {
 import { supabase, type Room, type Envelope, type Withdrawal } from '@/lib/supabase';
 import type { Profile } from '@/lib/useAuth';
 import { Money, Spinner } from '@/components/Shell';
-import { themeOf } from '@/lib/utils';
+import {
+  themeOf,
+  MIN_WITHDRAW_BALANCE,
+  WITHDRAW_FEE,
+} from '@/lib/utils';
 import { notifyAdmin } from '@/lib/push';
 
 function statusLabel(status: Room['status']): string {
@@ -45,14 +49,12 @@ export function ProfileScreen({
   isAdmin,
   onAdmin,
   onOpenRoom,
-  onLogout,
 }: {
   profile: Profile | null;
   userId: string;
   isAdmin?: boolean;
   onAdmin?: () => void;
   onOpenRoom: (code: string) => void;
-  onLogout: () => void;
 }) {
   const [tab, setTab] = useState<'wallet' | 'rooms' | 'winnings'>('wallet');
   const [walletTx, setWalletTx] = useState<
@@ -158,8 +160,10 @@ export function ProfileScreen({
   };
 
   const cashOut = async () => {
-    if (!balance || balance <= 0) {
-      setCashOutNotice('Хэтэвчний үлдэгдэл 0₮ байна.');
+    if (balance <= MIN_WITHDRAW_BALANCE) {
+      setCashOutNotice(
+        `Хэтэвчний үлдэгдэл ${MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮-өөс дээш үед мөнгө татах боломжтой. Дараагийн хожлоо нэмэх эсвэл шинэ өрөө үүсгэхэд ашиглаарай.`
+      );
       return;
     }
     const bankName = bank.trim() || profile?.bank_name || '';
@@ -179,7 +183,7 @@ export function ProfileScreen({
       bank_name: bankName,
       account_number: bankAccount,
       account_name: bankOwner,
-      description: 'Хэтэвчнээс мөнгө татах хүсэлт',
+      description: `Хэтэвчнээс мөнгө татах хүсэлт (банкны шимтгэл ${WITHDRAW_FEE}₮ суутгагдана)`,
     });
     setCashOutBusy(false);
     if (error) {
@@ -235,6 +239,8 @@ export function ProfileScreen({
   if (loading) return <Spinner />;
 
   const pendingPayout = walletTx.find((t) => t.type === 'payout' && t.status === 'pending');
+  const canCashOut = balance > MIN_WITHDRAW_BALANCE;
+  const netPayout = Math.max(0, balance - WITHDRAW_FEE);
 
   const canCancel = (r: Room) => {
     if (r.status !== 'active' && r.status !== 'PAID') return false;
@@ -281,17 +287,28 @@ export function ProfileScreen({
           </div>
           <button
             onClick={cashOut}
-            disabled={!balance || balance <= 0 || !!pendingPayout || cashOutBusy}
+            disabled={!canCashOut || !!pendingPayout || cashOutBusy}
             className="mt-5 w-full rounded-xl bg-white/15 backdrop-blur border border-white/30 py-2.5 font-semibold hover:bg-white/25 disabled:opacity-50 transition-colors"
           >
             {pendingPayout
               ? 'Татах хүсэлт хүлээгдэж байна'
-              : !balance || balance <= 0
-                ? 'Хэтэвч хоосон байна'
+              : !canCashOut
+                ? `Мөнгө татах (${MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮-өөс дээш)`
                 : cashOutBusy
                   ? 'Илгээж байна...'
                   : 'Мөнгө татах хүсэлт илгээх'}
           </button>
+          {canCashOut ? (
+            <p className="mt-2 text-xs text-white/90">
+              Банкны шимтгэл {WITHDRAW_FEE}₮ хасагдаж таны дансанд{' '}
+              <Money amount={netPayout} className="font-semibold" /> шилжинэ.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-white/80">
+              {MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮-өөс доош үлдэгдлийг дараагийн
+              хожлоо нэмэх эсвэл шинэ өрөө үүсгэхэд ашиглаарай.
+            </p>
+          )}
           {cashOutNotice && (
             <p className="mt-2 text-xs text-white/90">{cashOutNotice}</p>
           )}
@@ -496,12 +513,6 @@ export function ProfileScreen({
           </div>
         )}
 
-        <button
-          onClick={onLogout}
-          className="mt-8 w-full rounded-xl border border-neutral-300 py-3 font-medium text-neutral-600 hover:bg-neutral-50 transition-colors"
-        >
-          Гарах
-        </button>
       </div>
 
       {cancelTarget && (
