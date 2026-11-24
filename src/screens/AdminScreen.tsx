@@ -99,7 +99,7 @@ export function AdminScreen() {
 
   useEffect(() => {
     const run = async () => {
-      // Нэвтрээгүй (anon) үед is_admin руу хандах эрхгүй тул RPC дуудахгүй.
+      // Нэвтрээгүй (anon) үed is_admin руу хандах эрхгүй тул RPC дуудахгүй.
       if (!session) {
         setIsAdmin(false);
         setLoading(false);
