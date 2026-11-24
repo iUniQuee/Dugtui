@@ -5,12 +5,10 @@ import {
   MailOpen,
   Users,
   ArrowRight,
-  Sparkles,
-  QrCode,
   MonitorSmartphone,
   ShieldCheck,
 } from 'lucide-react';
-import { supabase, type Room } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { Money } from '@/components/Shell';
 import { FEE_RATE } from '@/lib/utils';
 
@@ -53,7 +51,7 @@ const STEPS = [
   },
   {
     title: '2. Линк хуваалцах',
-    desc: 'Үүссэн линк эсвэл QR кодыг оролцогчдодоо илгээнэ. Нэвтрэх шаардлагагүй.',
+    desc: 'Үүссэн линкээ найзууддаа илгээнэ. Бүртгэлтэй хэрэглэгчид шууд нэгдэнэ.',
   },
   {
     title: '3. Бэлгээ задлах',
@@ -62,19 +60,9 @@ const STEPS = [
 ];
 
 export function Landing({ onCreate }: { onCreate: (mode?: Mode) => void }) {
-  const [rooms, setRooms] = useState<Room[]>([]);
   const [stats, setStats] = useState({ giftCount: 0, giftTotal: 0 });
 
   useEffect(() => {
-    supabase
-      .from('rooms')
-      .select('*')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(5)
-      .then(({ data }) => {
-        if (data) setRooms(data as Room[]);
-      });
     supabase
       .from('envelopes')
       .select('amount, claimed')
@@ -176,39 +164,8 @@ export function Landing({ onCreate }: { onCreate: (mode?: Mode) => void }) {
         </div>
       </section>
 
-      {/* live rooms + stats */}
+      {/* stats */}
       <section className="mx-auto max-w-5xl px-4 py-10 grid md:grid-cols-2 gap-6">
-        <div className="rounded-3xl bg-white border border-neutral-200 p-6">
-          <h3 className="font-semibold text-neutral-900 flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-            </span>
-            Одоо болж буй сугалаанууд
-          </h3>
-          {rooms.length === 0 ? (
-            <p className="mt-4 text-sm text-neutral-500">
-              Одоогоор идэвхтэй өрөө байхгүй. Хамгийн анхны өрөөг та үүсгээрэй!
-            </p>
-          ) : (
-            <ul className="mt-4 space-y-2">
-              {rooms.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center justify-between rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium text-neutral-900 text-sm">{r.title}</p>
-                    <p className="text-xs text-neutral-400">
-                      {MODES.find((m) => m.id === r.type)?.label}
-                    </p>
-                  </div>
-                  <Money amount={r.total_amount} className="text-sm font-bold text-neutral-700" />
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
         <div className="rounded-3xl bg-gradient-to-br from-red-500 to-amber-500 text-white p-6 flex flex-col justify-center">
           <h3 className="font-semibold">Нийт тараагдсан бэлэг</h3>
           <div className="mt-4 flex items-end gap-8">
@@ -240,20 +197,11 @@ export function Landing({ onCreate }: { onCreate: (mode?: Mode) => void }) {
           </div>
           <div className="rounded-3xl bg-white border border-neutral-200 p-7">
             <MonitorSmartphone className="w-8 h-8 text-red-500" />
-            <h3 className="mt-3 font-bold text-lg">Утасндаа хэрэгтэйгээр</h3>
+            <h3 className="mt-3 font-bold text-lg">Гар утсанд тохиромжтой</h3>
             <p className="mt-2 text-sm text-neutral-500 leading-relaxed">
-              Бүх дэлгэц гар утасны хэмжээнд зохион бүтээгдсэн. Нэг ч дугтуй задлахад
-              нэвтрэх шаардлагагүй.
+              Хожсон болон цугларсан мөнгө таны хэтэвчинд шууд орно.
             </p>
           </div>
-        </div>
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => onCreate()}
-            className="rounded-full bg-gradient-to-r from-red-500 to-amber-500 text-white px-8 py-3.5 font-semibold hover:opacity-90 transition-opacity shadow-lg"
-          >
-            Одоо эхлэх
-          </button>
         </div>
       </section>
 
