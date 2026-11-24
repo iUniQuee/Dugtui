@@ -13,7 +13,7 @@ import { AuthModal } from '@/components/AuthModal';
 import { Header } from '@/components/Header';
 import { ErrorState, Spinner } from '@/components/Shell';
 import { useRefreshToken } from '@/lib/refresh';
-import { rememberRoom, takePendingRoom } from '@/lib/pendingRoom';
+import { rememberLink, takePendingLink } from '@/lib/pendingLink';
 
 type View =
   | { page: 'home' }
@@ -76,21 +76,32 @@ function App() {
       });
   }, [view, refreshToken]);
 
-  // Бүртгэлгүй хэрэглэгч өрөөний линкээр орж ирвэл кодыг түр хадгална:
-  // нэвтэрсний дараа шууд тэр өрөө рүү буцаж ороход ашиглана.
+  // Бүртгэлгүй хэрэглэгч өрөө эсвэл бэлгийн линкээр орж ирвэл утгыг түр хадгална:
+  // нэвтэрсний дараа шууд тэр хуудас руу буцаж ороход ашиглана.
   useEffect(() => {
-    if (view.page === 'room' && !session) rememberRoom(view.code);
+    if (session) return;
+    if (view.page === 'room') rememberLink('room', view.code);
+    else if (view.page === 'gift') rememberLink('gift', view.token);
   }, [view, session]);
 
-  // Нэвтэрсний дараа (модал, Google, и-мэйл баталгаажуулалт) хадгалсан өрөө рүү
-  // автоматаар буцаана. Аль хэдийн тэр өрөө дээр байгаа бол зөвхөн цэвэрлэнэ.
+  // Нэвтэрсний дараа (модал, Google, и-мэйл баталгаажуулалт) хадгалсан линк рүү
+  // автоматаар буцаана. Аль хэдийн тэр хуудас дээр байгаа бол зөвхөн цэвэрлэнэ.
   useEffect(() => {
     if (!session) return;
-    const pending = takePendingRoom();
-    if (!pending) return;
-    if (view.page === 'room' && view.code === pending) return;
-    window.history.replaceState(null, '', `/?room=${encodeURIComponent(pending)}`);
-    setView({ page: 'room', code: pending });
+
+    const pendingRoom = takePendingLink('room');
+    if (pendingRoom) {
+      if (view.page === 'room' && view.code === pendingRoom) return;
+      window.history.replaceState(null, '', `/?room=${encodeURIComponent(pendingRoom)}`);
+      setView({ page: 'room', code: pendingRoom });
+      return;
+    }
+
+    const pendingGift = takePendingLink('gift');
+    if (!pendingGift) return;
+    if (view.page === 'gift' && view.token === pendingGift) return;
+    window.history.replaceState(null, '', `/?gift=${encodeURIComponent(pendingGift)}`);
+    setView({ page: 'gift', token: pendingGift });
   }, [session, view]);
 
   // Дээд цэсний товч — хаяг дээрх хуучин ?room=… (болон бусад query)-ийг
