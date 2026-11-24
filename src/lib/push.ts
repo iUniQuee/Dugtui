@@ -2,10 +2,17 @@
  * Web Push — browser тал.
  *
  * VAPID private key хэзээ ч browser руу орохгүй: public key-г `/api/push/key`
- * серверээс авч, subscription-ыг Supabase-д (зөвхөн админ) хадгална.
+ * серверээс авна. Серверт env тохируулаагүй үед доорх нөөц public key
+ * ашиглагдана (public key нь нийтэд нээлттэй утга, private key л нууц).
+ *
+ * Мэдэгдэл зөвхөн 2 төрөлтэй:
+ *   1. Шинэ төлбөр (дүн + 6 оронтой гүйлгээний код)
+ *   2. Мөнгө татах хүсэлт (дүн + банкны нэр)
  */
 
 import { supabase } from '@/lib/supabase';
+
+const VAPID_PUBLIC_KEY_FALLBACK = 'BCo56aVOjAkTETbPUHJfSGODJdoTsG0i5zRUq3mdHnRoy2VhqFokAIRTBndK_Iju4T1aLBLH2w9NJfY3DyTeFg0';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -16,12 +23,17 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output;
 }
 
-function bufferToBase64Url(buffer: ArrayBuffer | null): string {
-  if (!buffer) return '';
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function bytesOf(value: ArrayBuffer | ArrayBufferView | null | undefined): Uint8Array | null {
+  if (!value) return null;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+}
+
+function sameKey(a: ArrayBuffer | ArrayBufferView | null | undefined, b: Uint8Array): boolean {
+  const bytes = bytesOf(a);
+  if (!bytes || bytes.length !== b.length) return false;
+  for (let i = 0; i < bytes.length; i += 1) if (bytes[i] !== b[i]) return false;
+  return true;
 }
 
 export function pushSupported(): boolean {
@@ -43,11 +55,14 @@ export async function enableAdminPush(): Promise<string> {
   }
 
   const keyRes = await fetch('/api/push/key').catch(() => null);
-  const keyData = keyRes ? ((await keyRes.json().catch(() => null)) as { publicKey?: string } | null) : null;
-  const publicKey = keyData?.publicKey || '';
+  const keyData = keyRes
+    ? ((await keyRes.json().catch(() => null)) as { publicKey?: string } | null)
+    : null;
+  const publicKey = (keyData?.publicKey || VAPID_PUBLIC_KEY_FALLBACK).trim();
   if (!publicKey) {
     throw new Error('Серверт VAPID_PUBLIC_KEY тохируулаагүй байна.');
   }
+  const applicationServerKey = urlBase64ToUint8Array(publicKey);
 
   if (Notification.permission === 'denied') {
     throw new Error('Мэдэгдэл блоклогдсон байна. Хөтчийн тохиргооноос зөвшөөрнө үү.');
@@ -61,13 +76,19 @@ export async function enableAdminPush(): Promise<string> {
   const registration = await navigator.serviceWorker.register('/sw.js');
   await navigator.serviceWorker.ready;
 
-  const existing = await registration.pushManager.getSubscription();
-  const subscription =
-    existing ??
-    (await registration.pushManager.subscribe({
+  // Өмнөх subscription өөр public key-ээр үүссэн бол дахин бүртгэнэ,
+  // эс бөгөөс серверээс илгээсэн push үл ойлгогдох алдаатай буцдаг.
+  let subscription = await registration.pushManager.getSubscription();
+  if (subscription && !sameKey(subscription.options?.applicationServerKey, applicationServerKey)) {
+    await subscription.unsubscribe().catch(() => false);
+    subscription = null;
+  }
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
-    }));
+      applicationServerKey: applicationServerKey as unknown as BufferSource,
+    });
+  }
 
   const {
     data: { session },
@@ -87,18 +108,16 @@ export async function enableAdminPush(): Promise<string> {
   );
   if (error) throw new Error(error.message);
 
-  return 'Мэдэгдэл тохируулагдлаа. Төлбөр, татах хүсэлт ирэхэд утсан дээр мэдэгдэнэ.';
+  return 'Мэдэгдэл тохируулагдлаа. Шинэ төлбөр, мөнгө татах хүсэлт ирэхэд энэ төхөөрөмж рүү шууд мэдэгдэнэ.';
 }
 
 /**
  * Админы утсанд push илгээхийг серверээс хүснэ. Алдаа гарвал төлбөрийн
- * урсгалыг зогсоохгүй (мэдэгдэл бол нэмэлт).
+ * урсгалыг зогсоохгүй (мэдэгдэл бол нэмэлт). Дүн, код, банкны нэрийг
+ * сервер DB-ээс өөрөө уншдаг тул клиентээс итгэлтэй утга дамжуулахгүй.
  */
 export async function notifyAdmin(
-  payload:
-    | { kind: 'payment'; roomId: string }
-    | { kind: 'withdrawal'; amount: number }
-    | { kind: 'contribution'; contributionId: string }
+  payload: { kind: 'payment'; roomId: string } | { kind: 'withdrawal'; amount?: number }
 ): Promise<void> {
   try {
     const {
@@ -108,9 +127,7 @@ export async function notifyAdmin(
     const body =
       payload.kind === 'payment'
         ? { kind: 'payment', room_id: payload.roomId }
-        : payload.kind === 'withdrawal'
-          ? { kind: 'withdrawal', amount: payload.amount }
-          : { kind: 'contribution', contribution_id: payload.contributionId };
+        : { kind: 'withdrawal', amount: payload.amount };
     await fetch('/api/push/notify', {
       method: 'POST',
       headers: {
