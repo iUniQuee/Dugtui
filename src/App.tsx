@@ -171,7 +171,7 @@ function App() {
       return (
         <>
           {nav}
-          <GroupPoolRoom room={room} />
+          <GroupPoolRoom room={room} onNeedAuth={() => setAuthTab('signup')} />
           {authModal}
         </>
       );

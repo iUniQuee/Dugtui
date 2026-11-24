@@ -12,7 +12,8 @@ export type RoomStatus =
   | 'PENDING_APPROVAL'
   | 'PAID'
   | 'REJECTED'
-  | 'CLAIMED';
+  | 'CLAIMED'
+  | 'CANCELLED';
 
 export interface Room {
   id: string;
