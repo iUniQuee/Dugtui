@@ -72,7 +72,7 @@ export function LuckyDrawRoom({
 
   useEffect(() => { load(); }, [load]);
 
-  // Өрөөний төлөв, оролцогчид, дугтуй — бодит цагт шинэчлэгдэнэ.
+  // Өрөөний төлөв, оролцогчид, дугтуй бодит цагт шинэчлэгдэнэ.
   useEffect(() => {
     const channel = supabase
       .channel('lucky-room-' + room.id)
@@ -186,13 +186,13 @@ export function LuckyDrawRoom({
           <div className="text-5xl mb-3">{theme.emojiHint}</div>
           <h1 className="text-2xl font-bold text-neutral-900">{room.title}</h1>
           <p className="text-sm text-neutral-500 mt-2 mb-6">
-            Өрөөнд орохын тулд бүртгэлтэй дансаараа нэвтэрнэ үү. Нэр дахин асуухгүй — профайлын нэрээр тань оролцогчдын жагсаалтад орно.
+            Өрөөнд орохын тулд бүртгэлтэй дансаараа нэвтэрнэ үү. Нэр дахин асуухгүй. Профайлын нэрээр тань оролцогчдын жагсаалтад орно.
           </p>
           <button onClick={onNeedAuth} className="w-full rounded-xl bg-gradient-to-r from-red-500 to-amber-500 text-white py-3 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
             <LogIn className="w-4 h-4" /> Нэвтрэх / Бүртгүүлэх
           </button>
           <p className="mt-4 text-xs text-neutral-400 flex items-center justify-center gap-1">
-            <Users className="w-3.5 h-3.5" /> {joinedCount}/{required || '—'} хүн орсон
+            <Users className="w-3.5 h-3.5" /> {joinedCount}/{required || '-'} хүн орсон
           </p>
           <p className="mt-2 text-xs text-neutral-400 flex items-center justify-center gap-1">
             <Lock className="w-3.5 h-3.5" /> {modeLabel}
@@ -261,7 +261,7 @@ export function LuckyDrawRoom({
     <div className="min-h-screen p-4">
       <GiftBg theme={room.theme} />
       <div className="mx-auto max-w-lg pt-8 pb-16">
-        {/* Загварын баярын толгой — дүрс, зохион байгуулагч, мэндчилгээ */}
+        {/* Загварын баярын толгой, дүрс, зохион байгуулагч, мэндчилгээ */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -307,7 +307,7 @@ export function LuckyDrawRoom({
 
         {!cancelled && (
           <>
-        {/* оролцогчид — ялагчдын үр дүн мөн энд */}
+        {/* оролцогчид, ялагчдын үр дүн мөн энд */}
         <div className="mt-6 rounded-2xl bg-white border border-neutral-200 shadow-sm p-4">
           <h2 className="text-sm font-semibold text-neutral-900 flex items-center gap-1.5">
             <Users className="w-4 h-4 text-sky-500" /> Оролцогчид ({joinedCount}/{required || joinedCount})
@@ -319,11 +319,11 @@ export function LuckyDrawRoom({
             {isFull ? (
               <span className="text-emerald-600 font-medium flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                {required > 0 ? 'Оролцогчдын тоо бүрэн бүрдлээ' : 'Оролцогчид нээлттэй'} — бэлгээ сонгоорой
+                {required > 0 ? 'Оролцогчдын тоо бүрэн бүрдлээ' : 'Оролцогчид нээлттэй'}, бэлгээ сонгоорой
               </span>
             ) : (
               <span className="text-amber-600 font-medium flex items-center gap-1">
-                <Hourglass className="w-3.5 h-3.5" /> Хүлээж байна — {remaining} хүн дутуу
+                <Hourglass className="w-3.5 h-3.5" /> Хүлээж байна, {remaining} хүн дутуу
               </span>
             )}
           </p>
@@ -371,7 +371,7 @@ export function LuckyDrawRoom({
           </p>
         </div>
 
-        {/* дугтуйн сүлжээ — зөвхөн оролцогчдын тоо бүрэн бүрдсэний дараа */}
+        {/* дугтуйн сүлжээ, зөвхөн оролцогчдын тоо бүрэн бүрдсэний дараа */}
         {cancelled ? null : isFull ? (
           <div className="mt-6 grid grid-cols-3 gap-3">
             {envelopes.map((env, i) => (
