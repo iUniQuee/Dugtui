@@ -10,9 +10,13 @@
  *   - /notify нь Supabase access token шаардана; payment мэдэгдлийг зөвхөн
  *     тухайн өрөөг үүсгэсэн хэрэглэгч, зөвхөн PENDING_APPROVAL төлөвтэй үед
  *     илгээж чадна (дүн, код DB-ээс уншигдана — клиентээс итгэхгүй).
+ *
+ * Зөвхөн 2 төрлийн мэдэгдэл байна:
+ *   - payment    : шинэ төлбөр (дүн + 6 оронтой гүйлгээний код)
+ *   - withdrawal : мөнгө татах хүсэлт (дүн + банкны нэр)
  */
 
-import { sendWebPush } from './webpush.js';
+import { sendWebPush, vapidPublicKey } from './webpush.js';
 
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -44,9 +48,9 @@ async function readJson(request) {
 }
 
 async function notifyAdmin(request, env) {
-  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+  if (!env.VAPID_PRIVATE_KEY) {
     return json(
-      { sent: 0, error: 'Push мэдэгдэл тохируулаагүй (VAPID түлхүүр байхгүй).' },
+      { sent: 0, error: 'Push мэдэгдэл тохируулаагүй (VAPID_PRIVATE_KEY байхгүй).' },
       503
     );
   }
@@ -95,46 +99,29 @@ async function notifyAdmin(request, env) {
     }
 
     const amount = Number(room.total_amount || 0) + Number(room.fee_amount || 0);
+    const code = String(room.payment_code || '').trim() || '-';
     title = 'Шинэ төлбөр';
-    text = `${formatMnt(amount)}₮, Утга: ${room.payment_code || '—'}`;
+    text = `${formatMnt(amount)}₮ · Код: ${code}`;
     tag = `payment-${room.id}`;
-  } else if (body.kind === 'contribution') {
-    const contributionId = String(body.contribution_id || '');
-    if (!contributionId) return json({ sent: 0, error: 'contribution_id шаардлагатай.' }, 400);
-
+  } else if (body.kind === 'withdrawal') {
+    // Дүн, банкны нэрийг хэрэглэгчийн хамгийн сүүлийн хүлээгдэж буй
+    // татах хүсэлтээс уншина (клиентээс итгэхгүй).
     const res = await fetch(
-      `${cfg.url}/rest/v1/contributions?id=eq.${encodeURIComponent(
-        contributionId
-      )}&select=id,name,amount,payment_code,status,user_id,rooms(title)`,
+      `${cfg.url}/rest/v1/wallet_transactions?user_id=eq.${encodeURIComponent(
+        user.id
+      )}&type=eq.payout&status=eq.pending&select=id,amount,bank_name&order=created_at.desc&limit=1`,
       { headers: { apikey: cfg.key, Authorization: `Bearer ${token}` } }
     );
     const rows = res.ok ? await res.json().catch(() => []) : [];
-    const contribution = Array.isArray(rows) ? rows[0] : null;
-
-    if (
-      !contribution ||
-      contribution.status !== 'PENDING_APPROVAL' ||
-      (contribution.user_id && contribution.user_id !== user.id)
-    ) {
-      return json({ sent: 0, error: 'Нэмэр олдсонгүй.' }, 404);
+    const payout = Array.isArray(rows) ? rows[0] : null;
+    const amount = Math.round(Number(payout?.amount) || 0);
+    if (!payout || !Number.isFinite(amount) || amount <= 0) {
+      return json({ sent: 0, error: 'Мөнгө татах хүсэлт олдсонгүй.' }, 404);
     }
-
-    const roomTitle = Array.isArray(contribution.rooms)
-      ? contribution.rooms[0]?.title
-      : contribution.rooms?.title;
-    title = 'Шинэ нэмэр';
-    text = `${contribution.name}: ${formatMnt(contribution.amount)}₮, Утга: ${
-      contribution.payment_code || '—'
-    }${roomTitle ? ` · ${roomTitle}` : ''}`;
-    tag = `contribution-${contribution.id}`;
-  } else if (body.kind === 'withdrawal') {
-    const amount = Math.round(Number(body.amount) || 0);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return json({ sent: 0, error: 'Дүн буруу байна.' }, 400);
-    }
+    const bankName = String(payout.bank_name || '').trim() || '-';
     title = 'Мөнгө татах хүсэлт';
-    text = `${formatMnt(amount)}₮ татах хүсэлт ирлээ`;
-    tag = `withdrawal-${user.id}-${Date.now()}`;
+    text = `${formatMnt(amount)}₮ · ${bankName}`;
+    tag = `withdrawal-${payout.id}`;
   } else {
     return json({ sent: 0, error: 'Мэдэгдлийн төрөл буруу.' }, 400);
   }
@@ -182,7 +169,7 @@ export async function handlePushApi(request, env) {
 
   try {
     if (route === 'key' && request.method === 'GET') {
-      return json({ publicKey: env.VAPID_PUBLIC_KEY || '' });
+      return json({ publicKey: vapidPublicKey(env) });
     }
     if (route === 'notify' && request.method === 'POST') {
       return await notifyAdmin(request, env);
