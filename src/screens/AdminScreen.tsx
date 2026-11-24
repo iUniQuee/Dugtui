@@ -388,7 +388,7 @@ export function AdminScreen() {
           <ShieldCheck className="w-6 h-6 text-emerald-600" /> Админ самбар
         </h1>
 
-        {/* Данс ба QR тохиргоо — самбар нээгдэхэд хамгийн эхэнд харагдана */}
+        {/* Данс ба QR тохиргоо, самбар нээгдэхэд хамгийн эхэнд харагдана */}
         {/* bank settings */}
           <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
             <div>
@@ -581,7 +581,7 @@ export function AdminScreen() {
                     <p className="text-sm text-neutral-600 mt-0.5">
                       Гүйлгээний утга:{' '}
                       <span className="font-mono font-bold tracking-widest text-neutral-900">
-                        {r.payment_code ?? '—'}
+                        {r.payment_code ?? '-'}
                       </span>
                     </p>
                     <p className="text-xs text-neutral-400 mt-0.5">
@@ -616,7 +616,7 @@ export function AdminScreen() {
           </div>
         )}
 
-        {/* contributions — хамтын бэлгийн нэмэр */}
+        {/* contributions, хамтын бэлгийн нэмэр */}
         {tab === 'contributions' && (
           <div className="mt-4 space-y-3">
             {contributions.length === 0 ? (
@@ -635,7 +635,7 @@ export function AdminScreen() {
                     <p className="text-sm text-neutral-600 mt-0.5">
                       {c.room?.title ?? 'Хамтын бэлэг'} · Гүйлгээний утга:{' '}
                       <span className="font-mono font-bold tracking-widest text-neutral-900">
-                        {c.payment_code ?? '—'}
+                        {c.payment_code ?? '-'}
                       </span>
                     </p>
                     {c.message && (
@@ -672,7 +672,7 @@ export function AdminScreen() {
           </div>
         )}
 
-        {/* transfers — хүлээн авагчийн дансны хүсэлт */}
+        {/* transfers, хүлээн авагчийн дансны хүсэлт */}
         {tab === 'transfers' && (
           <div className="mt-4 space-y-3">
             {transfers.length === 0 ? (
@@ -750,7 +750,7 @@ export function AdminScreen() {
                       />
                     </p>
                     <p className="text-sm text-neutral-500 mt-0.5">
-                      {p.bank_name ?? '—'} · {p.account_number ?? '—'}
+                      {p.bank_name ?? '-'} · {p.account_number ?? '-'}
                       {p.account_name ? ` · ${p.account_name}` : ''}
                     </p>
                     <p className="text-xs text-neutral-400 mt-0.5">
@@ -781,7 +781,7 @@ export function AdminScreen() {
           </div>
         )}
 
-        {/* history — батлагдсан бүх орлого, зарлага */}
+        {/* history, батлагдсан бүх орлого, зарлага */}
         {tab === 'history' && (
           <div className="mt-4 space-y-3">
             <div className="rounded-2xl border border-neutral-200 bg-white p-4">
@@ -865,12 +865,12 @@ export function AdminScreen() {
                           </p>
                         </td>
                         <td className="px-4 py-3 text-neutral-800">
-                          <p className="font-medium">{h.actor_name ?? '—'}</p>
+                          <p className="font-medium">{h.actor_name ?? '-'}</p>
                           {h.kind === 'expense' && (
                             <p className="mt-0.5 text-xs text-neutral-500">
-                              {h.bank_name ?? '—'} ·{' '}
+                              {h.bank_name ?? '-'} ·{' '}
                               <span className="font-mono">
-                                {h.account_number ? formatAccountNumber(h.account_number) : '—'}
+                                {h.account_number ? formatAccountNumber(h.account_number) : '-'}
                               </span>
                               {h.account_name ? ` · ${h.account_name}` : ''}
                             </p>
@@ -878,10 +878,10 @@ export function AdminScreen() {
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-mono font-semibold tracking-widest text-neutral-900">
-                            {h.payment_code ?? '—'}
+                            {h.payment_code ?? '-'}
                           </p>
                           <p className="mt-0.5 text-xs text-neutral-500">
-                            {h.room_title ?? '—'}
+                            {h.room_title ?? '-'}
                           </p>
                         </td>
                         <td
