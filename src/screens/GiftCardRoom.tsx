@@ -36,6 +36,13 @@ export function GiftCardRoom({
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  const running = useRef(false);
+  const approved = live.status === 'PAID' || live.status === 'CLAIMED' || live.status === 'active';
+  const takenByOther = !!live.claimed_by && live.claimed_by !== session?.user?.id;
+  const isMine = !!session?.user && live.claimed_by === session.user.id;
+  const isSender = !!session?.user && live.user_id === session.user.id;
+  const reveal = !!claimedRoom || isMine;
+
   useEffect(() => {
     setLive(room);
   }, [room]);
