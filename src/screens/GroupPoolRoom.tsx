@@ -10,6 +10,9 @@ import {
   Send,
   Share2,
   Users,
+  Wallet,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { supabase, type Contribution, type Room, type RoomStatus } from '@/lib/supabase';
 import { GiftBg, Money } from '@/components/Shell';
@@ -19,7 +22,7 @@ import { notifyAdmin } from '@/lib/push';
 import { useAuth } from '@/lib/useAuth';
 import { themeOf, formatMNT } from '@/lib/utils';
 
-export function GroupPoolRoom({ room }: { room: Room }) {
+export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: () => void }) {
   const theme = themeOf(room.theme);
   const { session, profile } = useAuth();
   const [contribs, setContribs] = useState<Contribution[]>([]);
@@ -39,6 +42,11 @@ export function GroupPoolRoom({ room }: { room: Room }) {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState('');
   const [submittedCode, setSubmittedCode] = useState('');
+  const [payWithWallet, setPayWithWallet] = useState(false);
+  const [walletNotice, setWalletNotice] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
   // Хүлээн авагчийн линк (зөвхөн өрөө үүсгэсэн хүнд)
   const [giftUrl, setGiftUrl] = useState('');
@@ -99,6 +107,28 @@ export function GroupPoolRoom({ room }: { room: Room }) {
   const percent = goal > 0 ? Math.min(100, Math.round((raised / goal) * 100)) : 0;
   const goalReached = goal > 0 && raised >= goal;
   const completed = liveStatus === 'completed';
+  const cancelled = liveStatus === 'CANCELLED';
+  const walletBalance = profile?.balance ?? 0;
+  const canCancel =
+    isOwner &&
+    !cancelled &&
+    !completed &&
+    !goalReached &&
+    (liveStatus === 'active' || liveStatus === 'PAID');
+
+  const cancelRoom = async () => {
+    if (cancelBusy) return;
+    setCancelBusy(true);
+    setCancelError('');
+    const { error } = await supabase.rpc('cancel_room', { p_room_id: room.id });
+    setCancelBusy(false);
+    if (error) {
+      setCancelError(error.message);
+      return;
+    }
+    setCancelOpen(false);
+    await load();
+  };
 
   // Зорилго 100% болмогц линкийг бэлдэж, зөвхөн өрөө үүсгэсэн хүнд харуулна.
   useEffect(() => {
@@ -124,15 +154,51 @@ export function GroupPoolRoom({ room }: { room: Room }) {
   }, [isOwner, goalReached, completed, room.id]);
 
   const openPay = () => {
+    if (!session) {
+      onNeedAuth?.();
+      return;
+    }
     const amt = parseInt(amount.replace(/\D/g, ''), 10);
     if (!name.trim()) return setError('Нэрээ оруулна уу.');
     if (!amt || amt <= 0) return setError('Зөв мөнгөн дүн оруулна уу.');
     if (goalReached) return setError('Зорилго биелсэн тул нэмэр авахыг хаасан байна.');
+    if (payWithWallet && walletBalance < amt) {
+      return setError('Хэтэвчний үлдэгдэл хүрэлцэхгүй байна.');
+    }
     setError('');
+    setWalletNotice('');
+    if (payWithWallet) {
+      void submitContributionFromWallet(amt);
+      return;
+    }
     setPayAmount(amt);
     setPaymentCode(generatePaymentCode());
     setPayError('');
     setShowPay(true);
+  };
+
+  // Хэтэвчний үлдэгдлээс шууд нэмэр (QR/шилжүүлэггүй).
+  const submitContributionFromWallet = async (amt: number) => {
+    setPaying(true);
+    setError('');
+    const { data, error: err } = await supabase.rpc('submit_group_contribution_from_wallet', {
+      p_room_id: room.id,
+      p_name: name.trim(),
+      p_amount: amt,
+      p_message: message.trim() || null,
+    });
+    setPaying(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setAmount('');
+    setMessage('');
+    setWalletNotice(`${formatMNT(amt)} хэтэвчнээс нэмэрлэгдлээ.`);
+    if (data && typeof data === 'object' && 'id' in data) {
+      void notifyAdmin({ kind: 'contribution', contributionId: String(data.id) });
+    }
+    void load();
   };
 
   const submitContribution = async () => {
@@ -204,6 +270,19 @@ export function GroupPoolRoom({ room }: { room: Room }) {
           Хамтдаа цуглуулъя — нэмэрээ үлдээгээрэй!
         </p>
 
+        {canCancel && (
+          <button
+            type="button"
+            onClick={() => {
+              setCancelError('');
+              setCancelOpen(true);
+            }}
+            className="mt-4 w-full rounded-xl border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors"
+          >
+            Өрөөг цуцлах
+          </button>
+        )}
+
         {/* progress card */}
         <motion.div
           layout
@@ -235,6 +314,17 @@ export function GroupPoolRoom({ room }: { room: Room }) {
             </div>
           )}
         </motion.div>
+
+        {/* Өрөө цуцлагдсан */}
+        {cancelled && (
+          <div className="mt-6 rounded-3xl border border-red-200 bg-red-50 p-6 text-center">
+            <AlertTriangle className="w-10 h-10 text-red-500 mx-auto" />
+            <p className="mt-2 font-semibold text-red-900">Өрөө цуцлагдсан</p>
+            <p className="mt-1 text-sm text-red-800">
+              Нэмэр хийсэн бүх хүний мөнгө өөрсдийн хэтэвчинд 100% буцаж орсон.
+            </p>
+          </div>
+        )}
 
         {/* Бэлэг хүргэгдсэн */}
         {completed && (
@@ -305,14 +395,14 @@ export function GroupPoolRoom({ room }: { room: Room }) {
         )}
 
         {/* contribution form */}
-        {!goalReached && !completed && (
+        {!goalReached && !completed && !cancelled && (
           <div className="mt-6 bg-white/90 backdrop-blur rounded-3xl border border-neutral-200 shadow p-6">
             <h2 className="font-semibold text-neutral-900 flex items-center gap-2">
               <HeartHandshake className="w-5 h-5" /> Нэмэр оруулах
             </h2>
             <p className="mt-1 text-xs text-neutral-500">
-              Нэмрээ илгээсний дараа QR-аар төлж, админ баталгаажуулсны дараа цугласан дүнд
-              нэмэгдэнэ.
+              QR-аар төлж админ баталгаажуулсны дараа, эсвэл хэтэвчний үлдэгдлээрээ шууд
+              нэмэрлэж болно. Нэмэр хийхийн тулд нэвтэрсэн байх шаардлагатай.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <input
@@ -338,16 +428,57 @@ export function GroupPoolRoom({ room }: { room: Room }) {
               placeholder="Мэндчилгээ (сонголттой)"
               className="mt-3 w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
             />
+            {session && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayWithWallet(false)}
+                  className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                    !payWithWallet
+                      ? 'border-neutral-900 bg-neutral-900 text-white'
+                      : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  Банкны QR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayWithWallet(true)}
+                  disabled={walletBalance <= 0}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    payWithWallet
+                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                      : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Wallet className="w-3.5 h-3.5" /> Хэтэвч (
+                  {walletBalance.toLocaleString('mn-MN')}₮)
+                </button>
+              </div>
+            )}
+            {walletNotice && (
+              <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                ✓ {walletNotice}
+              </p>
+            )}
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             <button
               onClick={openPay}
-              className="mt-4 w-full rounded-xl bg-gradient-to-r from-red-500 to-amber-500 text-white py-3 font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+              disabled={paying}
+              className="mt-4 w-full rounded-xl bg-gradient-to-r from-red-500 to-amber-500 text-white py-3 font-semibold hover:opacity-90 transition-opacity disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              <Send className="w-4 h-4" /> Нэмэр оруулах
+              <Send className="w-4 h-4" />
+              {!session
+                ? 'Нэвтэрч нэмэр оруулах'
+                : paying
+                  ? 'Илгээж байна...'
+                  : payWithWallet
+                    ? 'Хэтэвчээр нэмэрлэх'
+                    : 'Нэмэр оруулах'}
             </button>
             {!session && (
               <p className="mt-2 text-xs text-neutral-400 text-center">
-                Нэвтэрсэн бол нэр тань автоматаар бөглөгдөнө.
+                Нэмэр хийхийн тулд эхлээд нэвтэрнэ үү.
               </p>
             )}
           </div>
@@ -435,6 +566,55 @@ export function GroupPoolRoom({ room }: { room: Room }) {
             if (!paying) setShowPay(false);
           }}
         />
+      )}
+
+      {cancelOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-500">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+                <h2 className="text-lg font-bold text-neutral-900">Өрөөг цуцлах уу?</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelOpen(false)}
+                className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-100"
+                aria-label="Хаах"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-3 text-sm text-neutral-600">
+              «{room.title}» өрөө цуцлагдаж, батлагдсан нэмэр хийсэн бүх хүний мөнгө өөрсдийн
+              хэтэвчинд 100% буцаж орно. Энэ үйлдлийг буцаах боломжгүй.
+            </p>
+            {cancelError && (
+              <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
+                {cancelError}
+              </p>
+            )}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelOpen(false)}
+                className="flex-1 rounded-xl border border-neutral-300 py-2.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors"
+              >
+                Болих
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelRoom()}
+                disabled={cancelBusy}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
+              >
+                {cancelBusy ? 'Цуцалж байна...' : 'Тийм, цуцлах'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
