@@ -9,6 +9,8 @@ import {
   Settings2,
   ArrowRight,
   ShieldCheck,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { supabase, type Room, type Envelope, type Withdrawal } from '@/lib/supabase';
 import type { Profile } from '@/lib/useAuth';
@@ -28,6 +30,8 @@ function statusLabel(status: Room['status']): string {
       return 'Татгалзсан';
     case 'CLAIMED':
       return 'Хүлээн авсан';
+    case 'CANCELLED':
+      return 'Цуцлагдсан';
     case 'pending':
       return 'Төлбөр хүлээж байна';
     default:
@@ -66,6 +70,12 @@ export function ProfileScreen({
   const [loading, setLoading] = useState(true);
   const [cashOutBusy, setCashOutBusy] = useState(false);
   const [cashOutNotice, setCashOutNotice] = useState('');
+  const [participantCounts, setParticipantCounts] = useState<Record<string, number>>({});
+  const [contributionSums, setContributionSums] = useState<Record<string, number>>({});
+  const [roomMetaLoaded, setRoomMetaLoaded] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<Room | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState('');
 
   useEffect(() => {
     const run = async () => {
@@ -92,11 +102,46 @@ export function ProfileScreen({
         supabase.from('profiles').select('balance').eq('id', userId).maybeSingle(),
       ]);
       if (txRes.data) setWalletTx(txRes.data as typeof walletTx);
-      if (roomRes.data) setRooms(roomRes.data as Room[]);
+      if (roomRes.data) {
+        const list = roomRes.data as Room[];
+        setRooms(list);
+        // Цуцлах боломжийг шалгахын тулд оролцогчдын тоо, батлагдсан нэмрийн
+        // нийлбэрийг тусад нь татна (gift_transfers-ыг клиентээс уншихгүй).
+        const luckyIds = list
+          .filter((r) => r.type === 'lucky_draw' && (r.status === 'active' || r.status === 'PAID'))
+          .map((r) => r.id);
+        const groupIds = list
+          .filter((r) => r.type === 'group_pool' && (r.status === 'active' || r.status === 'PAID'))
+          .map((r) => r.id);
+        if (luckyIds.length || groupIds.length) {
+          const [partRes, contribRes] = await Promise.all([
+            supabase
+              .from('room_participants')
+              .select('room_id')
+              .in('room_id', luckyIds.length ? luckyIds : ['00000000-0000-0000-0000-000000000000']),
+            supabase
+              .from('contributions')
+              .select('room_id, amount')
+              .in('room_id', groupIds.length ? groupIds : ['00000000-0000-0000-0000-000000000000'])
+              .eq('status', 'PAID'),
+          ]);
+          const pCount: Record<string, number> = {};
+          for (const p of (partRes.data ?? []) as { room_id: string }[]) {
+            pCount[p.room_id] = (pCount[p.room_id] ?? 0) + 1;
+          }
+          setParticipantCounts(pCount);
+          const cSum: Record<string, number> = {};
+          for (const c of (contribRes.data ?? []) as { room_id: string; amount: number }[]) {
+            cSum[c.room_id] = (cSum[c.room_id] ?? 0) + Number(c.amount ?? 0);
+          }
+          setContributionSums(cSum);
+        }
+      }
       if (winRes.data) setWinnings(winRes.data as (Envelope & { room?: Room })[]);
       if (giftRes.data) setGiftCards(giftRes.data as Room[]);
       if (wdRes.data) setWithdrawals(wdRes.data as Withdrawal[]);
       if (balRes.data && typeof balRes.data.balance === 'number') setBalance(balRes.data.balance);
+      setRoomMetaLoaded(true);
       setLoading(false);
     };
     run();
@@ -113,7 +158,17 @@ export function ProfileScreen({
   };
 
   const cashOut = async () => {
-    if (!balance || balance <= 0) return;
+    if (!balance || balance <= 0) {
+      setCashOutNotice('Хэтэвчний үлдэгдэл 0₮ байна.');
+      return;
+    }
+    const bankName = bank.trim() || profile?.bank_name || '';
+    const bankAccount = account.trim() || profile?.account_number || '';
+    const bankOwner = accountName.trim() || profile?.account_name || '';
+    if (!bankName || !bankAccount || !bankOwner) {
+      setCashOutNotice('Эхлээд дансны мэдээллээ оруулж хадгална уу.');
+      return;
+    }
     setCashOutBusy(true);
     setCashOutNotice('');
     const { error } = await supabase.from('wallet_transactions').insert({
@@ -121,9 +176,9 @@ export function ProfileScreen({
       amount: balance,
       type: 'payout',
       status: 'pending',
-      bank_name: bank.trim() || profile?.bank_name,
-      account_number: account.trim() || profile?.account_number,
-      account_name: accountName.trim() || profile?.account_name,
+      bank_name: bankName,
+      account_number: bankAccount,
+      account_name: bankOwner,
       description: 'Хэтэвчнээс мөнгө татах хүсэлт',
     });
     setCashOutBusy(false);
@@ -145,9 +200,54 @@ export function ProfileScreen({
     }
   };
 
+  const cancelRoom = async () => {
+    const target = cancelTarget;
+    if (!target || cancelBusy) return;
+    setCancelBusy(true);
+    setCancelError('');
+    const { data, error } = await supabase.rpc('cancel_room', { p_room_id: target.id });
+    if (error) {
+      setCancelError(error.message);
+      setCancelBusy(false);
+      return;
+    }
+    setRooms((prev) =>
+      prev.map((r) => (r.id === target.id ? { ...r, status: 'CANCELLED' as const } : r)),
+    );
+    const refunded = Number((data as { refunded_total?: number } | null)?.refunded_total ?? 0);
+    if (refunded > 0) {
+      const [balRes, txRes] = await Promise.all([
+        supabase.from('profiles').select('balance').eq('id', userId).maybeSingle(),
+        supabase
+          .from('wallet_transactions')
+          .select('id, amount, type, status, description, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(30),
+      ]);
+      if (balRes.data && typeof balRes.data.balance === 'number') setBalance(balRes.data.balance);
+      if (txRes.data) setWalletTx(txRes.data as typeof walletTx);
+    }
+    setCancelBusy(false);
+    setCancelTarget(null);
+  };
+
   if (loading) return <Spinner />;
 
   const pendingPayout = walletTx.find((t) => t.type === 'payout' && t.status === 'pending');
+
+  const canCancel = (r: Room) => {
+    if (r.status !== 'active' && r.status !== 'PAID') return false;
+    if (r.type === 'group_pool') {
+      return !(r.total_amount > 0 && (contributionSums[r.id] ?? 0) >= r.total_amount);
+    }
+    if (r.type === 'lucky_draw') {
+      const required = r.participant_count ?? 0;
+      return required <= 0 || (participantCounts[r.id] ?? 0) < required;
+    }
+    // gift_card
+    return !r.claimed_by;
+  };
 
   return (
     <div className="min-h-screen pb-24">
@@ -298,22 +398,44 @@ export function ProfileScreen({
               <p className="text-sm text-neutral-400">Та одоогоор өрөө үүсгээгүй байна.</p>
             ) : (
               rooms.map((r) => (
-                <button
+                <div
                   key={r.id}
-                  onClick={() => onOpenRoom(r.code)}
-                  className="w-full flex items-center justify-between rounded-2xl border border-neutral-200 bg-white px-5 py-4 text-left hover:border-neutral-300 transition-colors"
+                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 hover:border-neutral-300 transition-colors"
                 >
-                  <div>
-                    <p className="font-medium text-neutral-900">{r.title}</p>
-                    <p className="text-xs text-neutral-400 mt-0.5">
-                      {themeOf(r.theme).label} · {statusLabel(r.status)}
-                    </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpenRoom(r.code)}
+                      className="flex-1 min-w-0 flex items-center justify-between gap-2 rounded-xl px-1 py-1 text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-neutral-900 truncate">{r.title}</p>
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          {themeOf(r.theme).label} ·{' '}
+                          <span className={r.status === 'CANCELLED' ? 'text-red-500 font-medium' : ''}>
+                            {statusLabel(r.status)}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Money amount={r.total_amount} className="text-sm font-bold text-neutral-700" />
+                        <ArrowRight className="w-4 h-4 text-neutral-400" />
+                      </div>
+                    </button>
+                    {roomMetaLoaded && canCancel(r) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCancelError('');
+                          setCancelTarget(r);
+                        }}
+                        className="shrink-0 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors"
+                      >
+                        Өрөөг цуцлах
+                      </button>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Money amount={r.total_amount} className="text-sm font-bold text-neutral-700" />
-                    <ArrowRight className="w-4 h-4 text-neutral-400" />
-                  </div>
-                </button>
+                </div>
               ))
             )}
           </div>
@@ -336,7 +458,12 @@ export function ProfileScreen({
                     </p>
                   )}
                 </div>
-                <Money amount={g.total_amount} className="font-bold text-emerald-600" />
+                <div className="flex flex-col items-end gap-1">
+                  <Money amount={g.total_amount} className="font-bold text-emerald-600" />
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                    <CheckCircle2 className="w-3 h-3" /> Хэтэвчинд орсон ✓
+                  </span>
+                </div>
               </div>
             ))}
             {winnings.length === 0 && giftCards.length === 0 ? (
@@ -357,7 +484,12 @@ export function ProfileScreen({
                       </p>
                     )}
                   </div>
-                  <Money amount={w.amount} className="font-bold text-emerald-600" />
+                  <div className="flex flex-col items-end gap-1">
+                    <Money amount={w.amount} className="font-bold text-emerald-600" />
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      <CheckCircle2 className="w-3 h-3" /> Хэтэвчинд орсон ✓
+                    </span>
+                  </div>
                 </div>
               ))
             )}
@@ -371,6 +503,53 @@ export function ProfileScreen({
           Гарах
         </button>
       </div>
+
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-500">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+                <h2 className="text-lg font-bold text-neutral-900">Өрөөг цуцлах уу?</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelTarget(null)}
+                className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-100"
+                aria-label="Хаах"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-3 text-sm text-neutral-600">
+              «{cancelTarget.title}» өрөө цуцлагдаж, төлсөн/нэмэрлэсэн мөнгө хэтэвчинд 100% буцаж
+              орно. Энэ үйлдлийг буцаах боломжгүй.
+            </p>
+            {cancelError && (
+              <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{cancelError}</p>
+            )}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelTarget(null)}
+                className="flex-1 rounded-xl border border-neutral-300 py-2.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors"
+              >
+                Болих
+              </button>
+              <button
+                type="button"
+                onClick={cancelRoom}
+                disabled={cancelBusy}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
+              >
+                {cancelBusy ? 'Цуцалж байна...' : 'Тийм, цуцлах'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
