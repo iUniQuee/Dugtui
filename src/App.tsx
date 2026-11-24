@@ -105,7 +105,11 @@ function App() {
     return (
       <>
         {nav}
-        <GiftRecipientRoom token={view.token} />
+        <GiftRecipientRoom
+          token={view.token}
+          onNeedAuth={(tab) => setAuthTab(tab ?? 'login')}
+          onWallet={() => goTo({ page: 'profile' }, '#profile')}
+        />
         {authModal}
       </>
     );
@@ -172,7 +176,7 @@ function App() {
         {nav}
         <GiftCardRoom
           room={room}
-          onNeedAuth={() => setAuthTab('signup')}
+          onNeedAuth={(tab) => setAuthTab(tab ?? 'login')}
           onWallet={() => goTo({ page: 'profile' }, '#profile')}
           onClaimed={(claimed) => setRoom(claimed)}
         />
