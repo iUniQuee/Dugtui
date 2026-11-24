@@ -92,7 +92,7 @@ export function Landing({ onCreate }: { onCreate: (mode?: Mode) => void }) {
             </span>
           </h1>
           <p className="mt-5 text-neutral-600 max-w-xl mx-auto">
-            Азын дугтуй, хамтын цугларалт, мэндчилгээт бэлэг — бүгд нэг дор. Линкээ
+            Азын дугтуй, хамтын цугларалт, мэндчилгээт бэлэг. Бүгд нэг дор. Линкээ
             хуваалцаад хамтдаа бэлгээ солилц.
           </p>
           <button
@@ -179,7 +179,7 @@ export function Landing({ onCreate }: { onCreate: (mode?: Mode) => void }) {
             </div>
           </div>
           <p className="mt-5 text-xs opacity-80 leading-relaxed">
-            Үйлчилгээний шимтгэл {(FEE_RATE * 100).toFixed(0)}% — зөвхөн үйлчилгээний зардалд.
+            Үйлчилгээний шимтгэл {(FEE_RATE * 100).toFixed(0)}% (зөвхөн үйлчилгээний зардалд).
           </p>
         </div>
       </section>
@@ -207,7 +207,7 @@ export function Landing({ onCreate }: { onCreate: (mode?: Mode) => void }) {
       </section>
 
       <footer className="py-8 text-center text-xs text-neutral-400">
-        © {new Date().getFullYear()} Бэлэг — Цахим бэлэг илгээх платформ
+        © {new Date().getFullYear()} Бэлэг · Цахим бэлэг илгээх платформ
       </footer>
     </div>
   );
