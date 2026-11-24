@@ -285,7 +285,7 @@ export function GiftRecipientRoom({
           </motion.button>
           <h1 className="mt-8 text-2xl font-bold text-neutral-900">Танд бэлэг ирлээ!</h1>
           <p className="mt-2 text-sm text-neutral-500">
-            {room.organizer_name ? `${room.organizer_name} · ` : ''}Дугтуйгаа дарж бэлгээ
+            {room.organizer_name ? `Илгээгч: ${room.organizer_name} · ` : ''}Дугтуйгаа дарж бэлгээ
             задална уу.
           </p>
           {claiming && (
