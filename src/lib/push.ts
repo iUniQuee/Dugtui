@@ -78,18 +78,20 @@ export async function enableAdminPush(): Promise<string> {
   const { error } = await supabase.from('push_subscriptions').upsert(
     {
       user_id: session.user.id,
-      endpoint: json.endpoint,
-      p256dh: json.keys?.p256dh,
-      auth: json.keys?.auth,
+      endpoint: subscription.endpoint,
+      p256dh: json.keys?.p256dh ?? '',
+      auth: json.keys?.auth ?? '',
+      user_agent: navigator.userAgent.slice(0, 200),
     },
     { onConflict: 'endpoint' }
   );
   if (error) throw new Error(error.message);
-  return 'Энэ төхөөрөмж мэдэгдэл хүлээн авахаар бүртгэгдлээ.';
+
+  return 'Мэдэгдэл тохируулагдлаа. Төлбөр, татах хүсэлт ирэхэд утсан дээр мэдэгдэнэ.';
 }
 
 /**
- * Админ руу push илгээнэ. Мэдэгдэл бүтэхгүй бол ч хэрэглэгчийн үндсэн
+ * Админы утсанд push илгээхийг серверээс хүсэ. Алдаа гарвал төлбөрийн
  * урсгалыг зогсоохгүй (мэдэгдэл бол нэмэлт).
  */
 export async function notifyAdmin(
