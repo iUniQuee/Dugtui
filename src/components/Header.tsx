@@ -1,6 +1,7 @@
 import { Gift, LogOut, ShieldCheck, UserRound } from 'lucide-react';
 
 export function Header({
+  onHome,
   onCreate,
   userName,
   isAdmin,
@@ -9,6 +10,7 @@ export function Header({
   onAuth,
   onSignOut,
 }: {
+  onHome?: () => void;
   onCreate?: () => void;
   userName?: string | null;
   isAdmin?: boolean;
@@ -20,7 +22,7 @@ export function Header({
   return (
     <header className="sticky top-0 z-40 backdrop-blur-md bg-white/70 border-b border-neutral-200">
       <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
-        <button onClick={() => onCreate?.()} className="flex items-center gap-2" aria-label="Нүүр">
+        <button onClick={() => (onHome ?? onCreate)?.()} className="flex items-center gap-2" aria-label="Нүүр">
           <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center">
             <Gift className="w-5 h-5 text-white" />
           </span>

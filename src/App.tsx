@@ -72,24 +72,23 @@ function App() {
       });
   }, [view]);
 
-  const goHome = () => {
-    window.location.hash = '';
-    setView({ page: 'home' });
+  // Дээд цэсний товч — хаяг дээрх хуучин ?room=… (болон бусад query)-ийг
+  // бүрэн цэвэрлэж, зөвхөн үндсэн зам (+ hash) руу шилжинэ.
+  const goTo = (next: View, hash = '') => {
+    window.history.replaceState(null, '', window.location.pathname + hash);
+    setView(next);
   };
+
+  const goHome = () => goTo({ page: 'home' });
 
   const nav = (
     <Header
-      onCreate={() => setView({ page: 'create' })}
+      onHome={goHome}
+      onCreate={() => goTo({ page: 'create' }, '#create')}
       userName={session ? profile?.display_name || 'Профайл' : null}
       isAdmin={isAdmin}
-      onProfile={() => {
-        window.location.hash = '#profile';
-        setView({ page: 'profile' });
-      }}
-      onAdmin={() => {
-        window.location.hash = '#admin';
-        setView({ page: 'admin' });
-      }}
+      onProfile={() => goTo({ page: 'profile' }, '#profile')}
+      onAdmin={() => goTo({ page: 'admin' }, '#admin')}
       onAuth={(tab) => setAuthTab(tab)}
       onSignOut={() => {
         signOut();
@@ -130,10 +129,7 @@ function App() {
           profile={profile}
           userId={session.user.id}
           isAdmin={isAdmin}
-          onAdmin={() => {
-            window.location.hash = '#admin';
-            setView({ page: 'admin' });
-          }}
+          onAdmin={() => goTo({ page: 'admin' }, '#admin')}
           onOpenRoom={(code) => setView({ page: 'room', code })}
         />
         {authModal}
@@ -177,10 +173,7 @@ function App() {
         <GiftCardRoom
           room={room}
           onNeedAuth={() => setAuthTab('signup')}
-          onWallet={() => {
-            window.location.hash = '#profile';
-            setView({ page: 'profile' });
-          }}
+          onWallet={() => goTo({ page: 'profile' }, '#profile')}
           onClaimed={(claimed) => setRoom(claimed)}
         />
         {authModal}
