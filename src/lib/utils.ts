@@ -1,5 +1,16 @@
 export const FEE_RATE = 0.02;
 
+/** Санамсаргүй хуваалтын хамгийн бага нэгж — зөвхөн 100₮-өөр бүхэлдсэн дүн гарна. */
+export const SPLIT_UNIT = 100;
+/** Өрөө үүсгэх доод хязгаар (азтан & хамтын бэлгийн зорилтот дүн). */
+export const MIN_ROOM_AMOUNT = 10000;
+/** Хамтын бэлэгт нэг удаа нэмэрлэх доод дүн. */
+export const MIN_CONTRIBUTION_AMOUNT = 5000;
+/** Хэтэвчнээс банк руу татах үед суутгах шимтгэл. */
+export const WITHDRAW_FEE = 200;
+/** Татах товч идэвхжихийн тулд үлдэгдэл үүнээс дээш байх ёстой. */
+export const MIN_WITHDRAW_BALANCE = 5000;
+
 export function formatMNT(amount: number): string {
   return new Intl.NumberFormat('mn-MN').format(amount) + '₮';
 }
@@ -13,48 +24,48 @@ export function generateRoomCode(): string {
   return code;
 }
 
+/**
+ * `units` нэгжийг `count` оролцогчид цэвэр санамсаргүйгээр хуваана.
+ * 0 нэгж (хоосон дугтуй) таарах боломжтой, нийлбэр нь яг `units`.
+ * Арга: `units + count - 1` боломжит байрлалаас `count - 1` зүсэлтийг
+ * санамсаргүй сонгож, хоорондын зайг тоолно (жигд санамсаргүй бүрдэл).
+ */
+function randomUnits(units: number, count: number): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [units];
+  const span = units + count - 1;
+  const cuts = new Set<number>();
+  while (cuts.size < count - 1) cuts.add(1 + Math.floor(Math.random() * span));
+  const sorted = [...cuts].sort((a, b) => a - b);
+  const bounds = [0, ...sorted, span + 1];
+  return Array.from({ length: count }, (_, i) => bounds[i + 1] - bounds[i] - 1);
+}
+
+/**
+ * Нийт дүнг оролцогчдод 100% бүрэн хуваарилна (нэг ч ₮ дутахгүй/илүү гарахгүй).
+ * Дүнгүүд зөвхөн 100₮-өөр бүхэлдэнэ (8,500₮ / 4,200₮ / 0₮ гэх мэт).
+ * «random» — цэвэр санамсаргүй, 0₮ (хоосон дугтуй) таарч болно.
+ */
 export function splitAmount(total: number, count: number, mode: 'equal' | 'random'): number[] {
   if (count <= 0) return [];
   const safeTotal = Math.max(0, Math.floor(total));
+  const units = Math.floor(safeTotal / SPLIT_UNIT);
+  // 100₮-д бүхэлдэхгүй үлдэгдлийг (0–99₮) санамсаргүй нэг дугтуйд нэмж,
+  // нийт дүнг яг 100% хуваарилна.
+  const rest = safeTotal - units * SPLIT_UNIT;
 
-  // Тэнцүү хуваах: нийт дүн / оролцогчдын тоо (үлдэгдлийг 1₮-өөр тараана).
-  if (mode === 'equal' || safeTotal < count) {
-    const base = Math.floor(safeTotal / count);
-    const remainder = safeTotal - base * count;
-    return Array.from({ length: count }, (_, i) => (i < remainder ? base + 1 : base));
+  let unitAmounts: number[];
+  if (mode === 'equal') {
+    // Тэнцүү хуваах: 100₮-ийн нэгжийг тэнцүү хувааж, үлдэгдлийг эхнийхүүдэд нэмнэ.
+    const base = Math.floor(units / count);
+    const rem = units - base * count;
+    unitAmounts = Array.from({ length: count }, (_, i) => base + (i < rem ? 1 : 0));
+  } else {
+    unitAmounts = randomUnits(units, count);
   }
 
-  // Санамсаргүй хуваах: санамсаргүй жинтэй, доод хэмжээ 1₮,
-  // нийлбэр яг нийт дүнтэй тэнцэнэ.
-  const weights = Array.from({ length: count }, () => 0.5 + Math.random());
-  const sum = weights.reduce((a, b) => a + b, 0);
-  const amounts = weights.map((w) => Math.max(1, Math.floor((w / sum) * safeTotal)));
-
-  // Бөөрөнхийлөлтийн зөрүүг 1₮-өөр тараана.
-  let diff = safeTotal - amounts.reduce((a, b) => a + b, 0);
-  let guard = 0;
-  while (diff !== 0 && guard < 100000) {
-    const idx = (Math.random() * count) | 0;
-    if (diff > 0) {
-      amounts[idx] += 1;
-      diff -= 1;
-    } else if (amounts[idx] > 1) {
-      amounts[idx] -= 1;
-      diff += 1;
-    }
-    guard += 1;
-  }
-
-  // Дүнгүүдийг аль болох ялгаатай болгоно (нийлбэр хэвээр).
-  for (let attempt = 0; attempt < count * 4; attempt += 1) {
-    const dupIdx = amounts.findIndex((a, i) => amounts.indexOf(a) !== i);
-    if (dupIdx === -1) break;
-    const maxIdx = amounts.indexOf(Math.max(...amounts));
-    if (maxIdx === dupIdx || amounts[maxIdx] <= 2) break;
-    amounts[maxIdx] -= 1;
-    amounts[dupIdx] += 1;
-  }
-
+  const amounts = unitAmounts.map((u) => u * SPLIT_UNIT);
+  if (rest > 0) amounts[Math.floor(Math.random() * count)] += rest;
   return amounts;
 }
 
