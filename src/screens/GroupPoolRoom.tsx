@@ -18,7 +18,6 @@ import { supabase, type Contribution, type Room, type RoomStatus } from '@/lib/s
 import { GiftBg, Money } from '@/components/Shell';
 import { BankTransferModal } from '@/components/BankTransferModal';
 import { generatePaymentCode } from '@/lib/payments';
-import { notifyAdmin } from '@/lib/push';
 import { useAuth } from '@/lib/useAuth';
 import { themeOf, formatMNT, MIN_CONTRIBUTION_AMOUNT } from '@/lib/utils';
 
@@ -187,7 +186,7 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
   const submitContributionFromWallet = async (amt: number) => {
     setPaying(true);
     setError('');
-    const { data, error: err } = await supabase.rpc('submit_group_contribution_from_wallet', {
+    const { error: err } = await supabase.rpc('submit_group_contribution_from_wallet', {
       p_room_id: room.id,
       p_name: name.trim(),
       p_amount: amt,
@@ -201,16 +200,13 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
     setAmount('');
     setMessage('');
     setWalletNotice(`${formatMNT(amt)} хэтэвчнээс нэмэрлэгдлээ.`);
-    if (data && typeof data === 'object' && 'id' in data) {
-      void notifyAdmin({ kind: 'contribution', contributionId: String(data.id) });
-    }
     void load();
   };
 
   const submitContribution = async () => {
     setPaying(true);
     setPayError('');
-    const { data, error: err } = await supabase.rpc('submit_group_contribution', {
+    const { error: err } = await supabase.rpc('submit_group_contribution', {
       p_room_id: room.id,
       p_name: name.trim(),
       p_amount: payAmount,
@@ -226,9 +222,6 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
     setSubmittedCode(paymentCode);
     setAmount('');
     setMessage('');
-    if (data && typeof data === 'object' && 'id' in data) {
-      void notifyAdmin({ kind: 'contribution', contributionId: String(data.id) });
-    }
     void load();
   };
 
