@@ -9,7 +9,7 @@ import { CreateRoomSuccess } from '@/screens/CreateRoomSuccess';
 import { CreateRoomModeTheme, MODE_LABELS, type Mode } from '@/screens/CreateRoomModeTheme';
 import { CreateRoomFeeSummary } from '@/screens/CreateRoomFeeSummary';
 import { CreateRoomAmounts } from '@/screens/CreateRoomAmounts';
-import { FEE_RATE, generateRoomCode, splitAmount, themeOf } from '@/lib/utils';
+import { FEE_RATE, MIN_ROOM_AMOUNT, generateRoomCode, splitAmount, themeOf } from '@/lib/utils';
 import { useAuth } from '@/lib/useAuth';
 
 export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => void; initialMode?: Mode; onNeedAuth?: () => void }) {
@@ -52,6 +52,11 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
     }
     if (!title.trim()) return setError('Үйл явдлын нэрээ оруулна уу.');
     if (totalNum <= 0) return setError('Зөв мөнгөн дүн оруулна уу.');
+    if (mode !== 'gift_card' && totalNum < MIN_ROOM_AMOUNT) {
+      return setError(
+        `Хамгийн багадаа ${MIN_ROOM_AMOUNT.toLocaleString('mn-MN')}₮ оруулах боломжтой.`
+      );
+    }
     if (mode === 'lucky_draw' && peopleNum <= 0) return setError('Оролцогчдын тоог оруулна уу.');
     setError('');
     // Өрөөний код болон гүйлгээний утга (6 орон) урьдчилан үүснэ.
