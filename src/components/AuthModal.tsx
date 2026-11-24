@@ -58,7 +58,10 @@ export function AuthModal({
       const { data, error: err } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { data: { display_name: displayName.trim() } },
+        options: {
+          data: { display_name: displayName.trim() },
+          emailRedirectTo: window.location.origin,
+        },
       });
       setBusy(false);
       if (err) {
