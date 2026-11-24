@@ -11,21 +11,34 @@ export interface Profile {
   account_name: string | null;
 }
 
+// Дэлгэцүүд pull-to-refresh-ээр дахин mount болоход session/профайл/админ эрх
+// "алга болсон" мэт гялбаа гарахгүйн тулд сүүлийн утгыг модуль түвшинд хадгална.
+let cachedSession: Session | null = null;
+let cachedProfile: Profile | null = null;
+let cachedAdmin = false;
+let sessionKnown = false;
+
 export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(cachedSession);
+  const [profile, setProfile] = useState<Profile | null>(cachedProfile);
+  const [isAdmin, setIsAdmin] = useState(cachedAdmin);
+  const [loading, setLoading] = useState(!sessionKnown);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
+      sessionKnown = true;
+      cachedSession = data.session;
       setSession(data.session);
       if (!data.session) setLoading(false);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      sessionKnown = true;
+      cachedSession = newSession;
       setSession(newSession);
       if (!newSession) {
+        cachedProfile = null;
+        cachedAdmin = false;
         setProfile(null);
         setLoading(false);
       }
@@ -43,6 +56,7 @@ export function useAuth() {
         .eq('id', user.id)
         .maybeSingle();
       if (data) {
+        cachedProfile = data as Profile;
         setProfile(data as Profile);
         setLoading(false);
         return;
@@ -59,6 +73,7 @@ export function useAuth() {
         .select('id, display_name, balance, bank_name, account_number, account_name')
         .maybeSingle();
       if (created) {
+        cachedProfile = created as Profile;
         setProfile(created as Profile);
       } else {
         // зэрэг үүссэн бол дахин уншина
@@ -67,7 +82,8 @@ export function useAuth() {
           .select('id, display_name, balance, bank_name, account_number, account_name')
           .eq('id', user.id)
           .maybeSingle();
-        setProfile((again as Profile) ?? null);
+        cachedProfile = (again as Profile) ?? null;
+        setProfile(cachedProfile);
       }
       setLoading(false);
     };
@@ -77,19 +93,27 @@ export function useAuth() {
   // Админ эрх нь сервер талд (is_admin RPC) шалгагдана.
   useEffect(() => {
     if (!session?.user) {
+      cachedAdmin = false;
       setIsAdmin(false);
       return;
     }
     let active = true;
     supabase.rpc('is_admin').then(({ data }) => {
-      if (active) setIsAdmin(data === true);
+      if (!active) return;
+      cachedAdmin = data === true;
+      setIsAdmin(cachedAdmin);
     });
     return () => {
       active = false;
     };
   }, [session?.user?.id]);
 
-  const signOut = () => supabase.auth.signOut();
+  const signOut = () => {
+    cachedSession = null;
+    cachedProfile = null;
+    cachedAdmin = false;
+    return supabase.auth.signOut();
+  };
 
   return {
     session,
