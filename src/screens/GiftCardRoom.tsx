@@ -36,13 +36,6 @@ export function GiftCardRoom({
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const running = useRef(false);
-  const approved = live.status === 'PAID' || live.status === 'CLAIMED' || live.status === 'active';
-  const takenByOther = !!live.claimed_by && live.claimed_by !== session?.user?.id;
-  const isMine = !!session?.user && live.claimed_by === session.user.id;
-  const isSender = !!session?.user && live.user_id === session.user.id;
-  const reveal = !!claimedRoom || isMine;
-
   useEffect(() => {
     setLive(room);
   }, [room]);
@@ -247,7 +240,7 @@ export function GiftCardRoom({
           <p className="mt-4 text-neutral-500">Баяр хүргэе!</p>
           <h1 className="mt-1 text-xl font-bold text-neutral-900">«{live.title}»</h1>
           {live.organizer_name && (
-            <p className="mt-1 text-sm text-neutral-500">— {live.organizer_name}</p>
+            <p className="mt-1 text-sm text-neutral-500">Илгээгч: {live.organizer_name}</p>
           )}
           {live.message && (
             <p className="mt-3 text-sm leading-relaxed text-neutral-600 italic">
@@ -297,7 +290,7 @@ export function GiftCardRoom({
         </motion.button>
         <h1 className="mt-8 text-2xl font-bold text-neutral-900">Танд бэлэг ирлээ!</h1>
         <p className="mt-2 text-sm text-neutral-500">
-          {live.organizer_name ? `${live.organizer_name} · ` : ''}Дугтуйгаа дарж бэлгээ задална уу.
+          {live.organizer_name ? `Илгээгч: ${live.organizer_name} · ` : ''}Дугтуйгаа дарж бэлгээ задална уу.
         </p>
         {claiming && (
           <p className="mt-3 text-sm text-emerald-600">Бэлгийг таны хэтэвчид хийж байна...</p>
