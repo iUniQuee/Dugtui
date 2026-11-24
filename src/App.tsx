@@ -13,6 +13,7 @@ import { AuthModal } from '@/components/AuthModal';
 import { Header } from '@/components/Header';
 import { ErrorState, Spinner } from '@/components/Shell';
 import { useRefreshToken } from '@/lib/refresh';
+import { rememberRoom, takePendingRoom } from '@/lib/pendingRoom';
 
 type View =
   | { page: 'home' }
@@ -74,6 +75,23 @@ function App() {
         setLoading(false);
       });
   }, [view, refreshToken]);
+
+  // Бүртгэлгүй хэрэглэгч өрөөний линкээр орж ирвэл кодыг түр хадгална:
+  // нэвтэрсний дараа шууд тэр өрөө рүү буцаж ороход ашиглана.
+  useEffect(() => {
+    if (view.page === 'room' && !session) rememberRoom(view.code);
+  }, [view, session]);
+
+  // Нэвтэрсний дараа (модал, Google, и-мэйл баталгаажуулалт) хадгалсан өрөө рүү
+  // автоматаар буцаана. Аль хэдийн тэр өрөө дээр байгаа бол зөвхөн цэвэрлэнэ.
+  useEffect(() => {
+    if (!session) return;
+    const pending = takePendingRoom();
+    if (!pending) return;
+    if (view.page === 'room' && view.code === pending) return;
+    window.history.replaceState(null, '', `/?room=${encodeURIComponent(pending)}`);
+    setView({ page: 'room', code: pending });
+  }, [session, view]);
 
   // Дээд цэсний товч — хаяг дээрх хуучин ?room=… (болон бусад query)-ийг
   // бүрэн цэвэрлэж, зөвхөн үндсэн зам (+ hash) руу шилжинэ.
