@@ -98,6 +98,35 @@ async function notifyAdmin(request, env) {
     title = 'Шинэ төлбөр';
     text = `${formatMnt(amount)}₮, Утга: ${room.payment_code || '—'}`;
     tag = `payment-${room.id}`;
+  } else if (body.kind === 'contribution') {
+    const contributionId = String(body.contribution_id || '');
+    if (!contributionId) return json({ sent: 0, error: 'contribution_id шаардлагатай.' }, 400);
+
+    const res = await fetch(
+      `${cfg.url}/rest/v1/contributions?id=eq.${encodeURIComponent(
+        contributionId
+      )}&select=id,name,amount,payment_code,status,user_id,rooms(title)`,
+      { headers: { apikey: cfg.key, Authorization: `Bearer ${token}` } }
+    );
+    const rows = res.ok ? await res.json().catch(() => []) : [];
+    const contribution = Array.isArray(rows) ? rows[0] : null;
+
+    if (
+      !contribution ||
+      contribution.status !== 'PENDING_APPROVAL' ||
+      (contribution.user_id && contribution.user_id !== user.id)
+    ) {
+      return json({ sent: 0, error: 'Нэмэр олдсонгүй.' }, 404);
+    }
+
+    const roomTitle = Array.isArray(contribution.rooms)
+      ? contribution.rooms[0]?.title
+      : contribution.rooms?.title;
+    title = 'Шинэ нэмэр';
+    text = `${contribution.name}: ${formatMnt(contribution.amount)}₮, Утга: ${
+      contribution.payment_code || '—'
+    }${roomTitle ? ` · ${roomTitle}` : ''}`;
+    tag = `contribution-${contribution.id}`;
   } else if (body.kind === 'withdrawal') {
     const amount = Math.round(Number(body.amount) || 0);
     if (!Number.isFinite(amount) || amount <= 0) {

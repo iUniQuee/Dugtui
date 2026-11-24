@@ -6,6 +6,7 @@ import { CreateRoom } from '@/screens/CreateRoom';
 import { LuckyDrawRoom } from '@/screens/LuckyDrawRoom';
 import { GroupPoolRoom } from '@/screens/GroupPoolRoom';
 import { GiftCardRoom } from '@/screens/GiftCardRoom';
+import { GiftRecipientRoom } from '@/screens/GiftRecipientRoom';
 import { ProfileScreen } from '@/screens/ProfileScreen';
 import { AdminScreen } from '@/screens/AdminScreen';
 import { AuthModal } from '@/components/AuthModal';
@@ -16,11 +17,14 @@ type View =
   | { page: 'home' }
   | { page: 'create'; mode?: 'lucky_draw' | 'group_pool' | 'gift_card' }
   | { page: 'room'; code: string }
+  | { page: 'gift'; token: string }
   | { page: 'profile' }
   | { page: 'admin' };
 
 function getView(): View {
   const params = new URLSearchParams(window.location.search);
+  const gift = params.get('gift');
+  if (gift) return { page: 'gift', token: gift };
   const room = params.get('room');
   if (room) return { page: 'room', code: room.toUpperCase() };
   if (window.location.hash === '#create') return { page: 'create' };
@@ -97,6 +101,16 @@ function App() {
   const authModal = authTab && (
     <AuthModal initialTab={authTab} onClose={() => setAuthTab(null)} />
   );
+
+  if (view.page === 'gift') {
+    return (
+      <>
+        {nav}
+        <GiftRecipientRoom token={view.token} />
+        {authModal}
+      </>
+    );
+  }
 
   if (view.page === 'profile') {
     if (!session)
