@@ -74,7 +74,7 @@ export function BankTransferModal({
               Банкны QR уншуулж төлөх (Богд банк)
             </h3>
             <p className="mt-1 text-sm text-neutral-500">
-              {title ? `“${title}”` : 'Бэлгийн өрөө'} — {formatMnt(amount)}
+              {title ? `“${title}”` : 'Бэлгийн өрөө'} · {formatMnt(amount)}
             </p>
           </div>
           <button
@@ -108,13 +108,13 @@ export function BankTransferModal({
           <InfoRow label="Банк" value={settings.bank_name} />
           <InfoRow
             label="Дансны дугаар"
-            value={formatAccountNumber(settings.account_number) || '—'}
+            value={formatAccountNumber(settings.account_number) || '-'}
             copied={copied === 'account'}
             onCopy={() => void copy('account', normalizeAccountNumber(settings.account_number))}
           />
           <InfoRow
             label="Хүлээн авагч"
-            value={settings.account_name || '—'}
+            value={settings.account_name || '-'}
             copied={copied === 'name'}
             onCopy={() => void copy('name', settings.account_name)}
           />
@@ -197,7 +197,7 @@ function InfoRow({
       >
         {value}
       </span>
-      {onCopy && value !== '—' && (
+      {onCopy && value !== '-' && (
         <button
           onClick={onCopy}
           className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-50"
