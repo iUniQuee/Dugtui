@@ -71,6 +71,8 @@ export function ProfileScreen({
   const [loading, setLoading] = useState(true);
   const [cashOutBusy, setCashOutBusy] = useState(false);
   const [cashOutNotice, setCashOutNotice] = useState('');
+  const [cashOutOpen, setCashOutOpen] = useState(false);
+  const [cashOutAmount, setCashOutAmount] = useState('');
   const [participantCounts, setParticipantCounts] = useState<Record<string, number>>({});
   const [contributionSums, setContributionSums] = useState<Record<string, number>>({});
   const [roomMetaLoaded, setRoomMetaLoaded] = useState(false);
@@ -155,10 +157,23 @@ export function ProfileScreen({
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const openCashOut = () => {
+    setCashOutNotice('');
+    setCashOutAmount('');
+    setCashOutOpen(true);
+  };
+
   const cashOut = async () => {
-    if (balance <= MIN_WITHDRAW_BALANCE) {
+    const amount = Number(cashOutAmount.replace(/\D/g, '')) || 0;
+    if (amount < MIN_WITHDRAW_BALANCE) {
       setCashOutNotice(
-        `Хэтэвчний үлдэгдэл ${MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮-өөс дээш үед мөнгө татах боломжтой. Дараагийн хожлоо нэмэх эсвэл шинэ өрөө үүсгэхэд ашиглаарай.`
+        `Хамгийн багадаа ${MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮ татах боломжтой.`
+      );
+      return;
+    }
+    if (amount > balance) {
+      setCashOutNotice(
+        `Үлдэгдэл хүрэлцэхгүй байна. Хамгийн ихдээ ${balance.toLocaleString('mn-MN')}₮ татах боломжтой.`
       );
       return;
     }
@@ -171,33 +186,39 @@ export function ProfileScreen({
     }
     setCashOutBusy(true);
     setCashOutNotice('');
-    const { error } = await supabase.from('wallet_transactions').insert({
-      user_id: userId,
-      amount: balance,
-      type: 'payout',
-      status: 'pending',
-      bank_name: bankName,
-      account_number: bankAccount,
-      account_name: bankOwner,
-      description: `Хэтэвчнээс мөнгө татах хүсэлт (банкны шимтгэл ${WITHDRAW_FEE}₮ суутгагдана)`,
+    // Хүсэлт илгээгдэх үед зөвхөн хүссэн дүн хэтэвчнээс хасагдана.
+    const { error } = await supabase.rpc('request_withdrawal', {
+      p_amount: amount,
+      p_bank_name: bankName,
+      p_account_number: bankAccount,
+      p_account_name: bankOwner,
     });
-    setCashOutBusy(false);
     if (error) {
+      setCashOutBusy(false);
       setCashOutNotice('Хүсэлт илгээж чадсангүй: ' + error.message);
       return;
     }
     // Админы утсанд push мэдэгдэл илгээнэ.
-    void notifyAdmin({ kind: 'withdrawal', amount: balance });
-    {
-      // refresh wallet ledger + balance display happens on next profile load
-      const { data } = await supabase
+    void notifyAdmin({ kind: 'withdrawal', amount });
+    const [balRes, txRes] = await Promise.all([
+      supabase.from('profiles').select('balance').eq('id', userId).maybeSingle(),
+      supabase
         .from('wallet_transactions')
         .select('id, amount, type, status, description, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-        .limit(30);
-      if (data) setWalletTx(data as typeof walletTx);
-    }
+        .limit(30),
+    ]);
+    if (balRes.data && typeof balRes.data.balance === 'number') setBalance(balRes.data.balance);
+    if (txRes.data) setWalletTx(txRes.data as typeof walletTx);
+    setCashOutBusy(false);
+    setCashOutOpen(false);
+    setCashOutAmount('');
+    setCashOutNotice(
+      `Хүсэлт илгээгдлээ. Банкны шимтгэл ${WITHDRAW_FEE}₮ хасагдаж таны дансанд ${formatMNT(
+        amount - WITHDRAW_FEE
+      )} шилжинэ.`
+    );
   };
 
   const cancelRoom = async () => {
@@ -235,8 +256,9 @@ export function ProfileScreen({
   if (loading) return <Spinner />;
 
   const pendingPayout = walletTx.find((t) => t.type === 'payout' && t.status === 'pending');
-  const canCashOut = balance > MIN_WITHDRAW_BALANCE;
-  const netPayout = Math.max(0, balance - WITHDRAW_FEE);
+  const canCashOut = balance >= MIN_WITHDRAW_BALANCE;
+  const typedWithdrawAmount = Number(cashOutAmount.replace(/\D/g, '')) || 0;
+  const typedNetPayout = Math.max(0, typedWithdrawAmount - WITHDRAW_FEE);
 
   const canCancel = (r: Room) => {
     if (r.status !== 'active' && r.status !== 'PAID') return false;
@@ -282,31 +304,100 @@ export function ProfileScreen({
             <Wallet className="w-10 h-10 opacity-80" />
           </div>
           <button
-            onClick={cashOut}
+            onClick={openCashOut}
             disabled={!canCashOut || !!pendingPayout || cashOutBusy}
             className="mt-5 w-full rounded-xl bg-white/15 backdrop-blur border border-white/30 py-2.5 font-semibold hover:bg-white/25 disabled:opacity-50 transition-colors"
           >
             {pendingPayout
               ? 'Татах хүсэлт хүлээгдэж байна'
               : !canCashOut
-                ? `Мөнгө татах (${MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮-өөс дээш)`
+                ? `Мөнгө татах (хамгийн багадаа ${MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮)`
                 : cashOutBusy
                   ? 'Илгээж байна...'
                   : 'Мөнгө татах хүсэлт илгээх'}
           </button>
-          {canCashOut ? (
-            <p className="mt-2 text-xs text-white/90">
-              Банкны шимтгэл {WITHDRAW_FEE}₮ хасагдаж таны дансанд{' '}
-              <Money amount={netPayout} className="font-semibold" /> шилжинэ.
+          {cashOutOpen && canCashOut && !pendingPayout && (
+            <div className="mt-3 rounded-2xl border border-white/30 bg-white/15 p-4">
+              <span className="text-xs text-white/85">Татах дүн (₮)</span>
+              <div className="mt-1.5 flex gap-2">
+                <input
+                  value={cashOutAmount}
+                  onChange={(e) => {
+                    setCashOutAmount(e.target.value.replace(/\D/g, ''));
+                    setCashOutNotice('');
+                  }}
+                  inputMode="numeric"
+                  autoFocus
+                  placeholder={MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}
+                  className="min-w-0 flex-1 rounded-xl border border-white/40 bg-white/95 px-3 py-2.5 font-semibold text-neutral-900 focus:outline-none focus:ring-2 focus:ring-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCashOutAmount(String(balance));
+                    setCashOutNotice('');
+                  }}
+                  className="shrink-0 rounded-xl border border-white/40 bg-white/25 px-4 py-2.5 text-sm font-semibold hover:bg-white/35 transition-colors"
+                >
+                  Бүгдийг
+                </button>
+              </div>
+              {typedWithdrawAmount > 0 ? (
+                <p className="mt-2 text-xs text-white/95">
+                  Банкны шимтгэл {WITHDRAW_FEE}₮ хасагдаж таны дансанд{' '}
+                  <Money amount={typedNetPayout} className="font-semibold" /> шилжинэ.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-white/80">
+                  Хамгийн багадаа {MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮, хамгийн
+                  ихдээ {balance.toLocaleString('mn-MN')}₮.
+                </p>
+              )}
+              {typedWithdrawAmount > 0 && typedWithdrawAmount < MIN_WITHDRAW_BALANCE && (
+                <p className="mt-1 text-xs font-medium text-amber-100">
+                  Хамгийн багадаа {MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮ байх ёстой.
+                </p>
+              )}
+              {typedWithdrawAmount > balance && (
+                <p className="mt-1 text-xs font-medium text-amber-100">
+                  Хэтэвчний үлдэгдлээс ({balance.toLocaleString('mn-MN')}₮) хэтэрч болохгүй.
+                </p>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={cashOut}
+                  disabled={cashOutBusy}
+                  className="flex-1 rounded-xl bg-white py-2.5 font-semibold text-emerald-700 hover:bg-white/90 disabled:opacity-50 transition-colors"
+                >
+                  {cashOutBusy ? 'Илгээж байна...' : 'Хүсэлт илгээх'}
+                </button>
+                <button
+                  onClick={() => {
+                    setCashOutOpen(false);
+                    setCashOutAmount('');
+                    setCashOutNotice('');
+                  }}
+                  className="rounded-xl border border-white/40 px-4 py-2.5 text-sm font-medium hover:bg-white/10 transition-colors"
+                >
+                  Болих
+                </button>
+              </div>
+            </div>
+          )}
+          {!cashOutOpen && canCashOut && (
+            <p className="mt-2 text-xs text-white/80">
+              Татах дүнгээ өөрөө сонгоно. Хамгийн багадаа{' '}
+              {MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮.
             </p>
-          ) : (
+          )}
+          {!canCashOut && (
             <p className="mt-2 text-xs text-white/80">
               {MIN_WITHDRAW_BALANCE.toLocaleString('mn-MN')}₮-өөс доош үлдэгдлийг дараагийн
               хожлоо нэмэх эсвэл шинэ өрөө үүсгэхэд ашиглаарай.
             </p>
           )}
           {cashOutNotice && (
-            <p className="mt-2 text-xs text-white/90">{cashOutNotice}</p>
+            <p className="mt-2 text-xs font-medium text-white/95">{cashOutNotice}</p>
           )}
         </motion.div>
 
