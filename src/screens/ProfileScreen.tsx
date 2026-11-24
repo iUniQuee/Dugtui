@@ -6,17 +6,17 @@ import {
   Landmark,
   CheckCircle2,
   Clock,
-  Settings2,
   ArrowRight,
   ShieldCheck,
   AlertTriangle,
   X,
 } from 'lucide-react';
-import { supabase, type Room, type Envelope, type Withdrawal } from '@/lib/supabase';
+import { supabase, type Room, type Envelope } from '@/lib/supabase';
 import type { Profile } from '@/lib/useAuth';
 import { Money, Spinner } from '@/components/Shell';
 import {
   themeOf,
+  formatMNT,
   MIN_WITHDRAW_BALANCE,
   WITHDRAW_FEE,
 } from '@/lib/utils';
@@ -64,7 +64,6 @@ export function ProfileScreen({
   const [winnings, setWinnings] = useState<(Envelope & { room?: Room })[]>([]);
   const [giftCards, setGiftCards] = useState<Room[]>([]);
   const [balance, setBalance] = useState(profile?.balance ?? 0);
-  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [bank, setBank] = useState(profile?.bank_name ?? '');
   const [account, setAccount] = useState(profile?.account_number ?? '');
   const [accountName, setAccountName] = useState(profile?.account_name ?? '');
@@ -81,7 +80,7 @@ export function ProfileScreen({
 
   useEffect(() => {
     const run = async () => {
-      const [txRes, roomRes, winRes, wdRes, giftRes, balRes] = await Promise.all([
+      const [txRes, roomRes, winRes, giftRes, balRes] = await Promise.all([
         supabase
           .from('wallet_transactions')
           .select('id, amount, type, status, description, created_at')
@@ -94,7 +93,6 @@ export function ProfileScreen({
           .select('*, room:rooms(*)')
           .eq('claimed_by', userId)
           .order('claimed_at', { ascending: false }),
-        supabase.from('withdrawals').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
         supabase
           .from('rooms')
           .select('*')
@@ -141,13 +139,11 @@ export function ProfileScreen({
       }
       if (winRes.data) setWinnings(winRes.data as (Envelope & { room?: Room })[]);
       if (giftRes.data) setGiftCards(giftRes.data as Room[]);
-      if (wdRes.data) setWithdrawals(wdRes.data as Withdrawal[]);
       if (balRes.data && typeof balRes.data.balance === 'number') setBalance(balRes.data.balance);
       setRoomMetaLoaded(true);
       setLoading(false);
     };
     run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const saveBank = async () => {
@@ -397,10 +393,11 @@ export function ProfileScreen({
                                 : 'Хожсон дүн')}
                         </span>
                       </div>
-                      <Money
-                        amount={t.amount}
-                        className={`shrink-0 font-bold ${t.type === 'payout' ? 'text-neutral-500' : 'text-emerald-600'}`}
-                      />
+                      {t.type === 'payout' || t.type === 'payment' ? (
+                        <span className="shrink-0 font-bold text-red-600">−{formatMNT(t.amount)}</span>
+                      ) : (
+                        <span className="shrink-0 font-bold text-emerald-600">+{formatMNT(t.amount)}</span>
+                      )}
                     </li>
                   ))}
                 </ul>
