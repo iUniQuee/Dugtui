@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Гар утсан дээр хөтчийн өөрийн pull-to-refresh-ийг унтрааж, оронд нь
+   аппын өөрийн чирч шинэчлэх (PullToRefresh) ажиллана. */
+html,
+body {
+  overscroll-behavior-y: contain;
+}
