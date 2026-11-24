@@ -56,7 +56,7 @@ export async function enableAdminPush(): Promise<string> {
     Notification.permission === 'granted'
       ? 'granted'
       : await Notification.requestPermission();
-  if (permission !== 'granted') throw new Error('Мэдэгдлийн зөвшөөрөл өгөөгүй.');
+  if (permission !== 'granted') throw new Error('Мэдэгдлийн зөвшөөрөл өгөгдөөгүй.');
 
   const registration = await navigator.serviceWorker.register('/sw.js');
   await navigator.serviceWorker.ready;
