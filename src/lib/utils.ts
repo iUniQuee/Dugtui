@@ -15,18 +15,46 @@ export function generateRoomCode(): string {
 
 export function splitAmount(total: number, count: number, mode: 'equal' | 'random'): number[] {
   if (count <= 0) return [];
-  if (mode === 'equal') {
-    const base = Math.floor(total / count);
-    const remainder = total - base * count;
+  const safeTotal = Math.max(0, Math.floor(total));
+
+  // Тэнцүү хуваах: нийт дүн / оролцогчдын тоо (үлдэгдлийг 1₮-өөр тараана).
+  if (mode === 'equal' || safeTotal < count) {
+    const base = Math.floor(safeTotal / count);
+    const remainder = safeTotal - base * count;
     return Array.from({ length: count }, (_, i) => (i < remainder ? base + 1 : base));
   }
-  // random split (red-envelope style): random weights, min 1
-  const weights = Array.from({ length: count }, () => Math.random() + 0.01);
+
+  // Санамсаргүй хуваах: санамсаргүй жинтэй, доод хэмжээ 1₮,
+  // нийлбэр яг нийт дүнтэй тэнцэнэ.
+  const weights = Array.from({ length: count }, () => 0.5 + Math.random());
   const sum = weights.reduce((a, b) => a + b, 0);
-  const amounts = weights.map((w) => Math.max(1, Math.floor((w / sum) * total)));
-  // fix rounding drift on a random index
-  const diff = total - amounts.reduce((a, b) => a + b, 0);
-  amounts[(Math.random() * count) | 0] += diff;
+  const amounts = weights.map((w) => Math.max(1, Math.floor((w / sum) * safeTotal)));
+
+  // Бөөрөнхийлөлтийн зөрүүг 1₮-өөр тараана.
+  let diff = safeTotal - amounts.reduce((a, b) => a + b, 0);
+  let guard = 0;
+  while (diff !== 0 && guard < 100000) {
+    const idx = (Math.random() * count) | 0;
+    if (diff > 0) {
+      amounts[idx] += 1;
+      diff -= 1;
+    } else if (amounts[idx] > 1) {
+      amounts[idx] -= 1;
+      diff += 1;
+    }
+    guard += 1;
+  }
+
+  // Дүнгүүдийг аль болох ялгаатай болгоно (нийлбэр хэвээр).
+  for (let attempt = 0; attempt < count * 4; attempt += 1) {
+    const dupIdx = amounts.findIndex((a, i) => amounts.indexOf(a) !== i);
+    if (dupIdx === -1) break;
+    const maxIdx = amounts.indexOf(Math.max(...amounts));
+    if (maxIdx === dupIdx || amounts[maxIdx] <= 2) break;
+    amounts[maxIdx] -= 1;
+    amounts[dupIdx] += 1;
+  }
+
   return amounts;
 }
 

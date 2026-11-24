@@ -32,6 +32,7 @@ export interface Room {
   payment_reviewed_at: string | null;
   reject_reason: string | null;
   qpay_invoice_id: string | null;
+  user_id: string | null;
   organizer_name: string | null;
   message: string | null;
   image_url: string | null;
@@ -44,10 +45,20 @@ export interface Envelope {
   room_id: string;
   amount: number;
   claimed: boolean;
+  claimed_by: string | null;
   claimed_by_name: string | null;
   claimed_by_phone: string | null;
   claimed_at: string | null;
   claim_token: string | null;
+}
+
+export interface RoomParticipant {
+  id: string;
+  room_id: string;
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  joined_at: string;
 }
 
 export interface Contribution {
