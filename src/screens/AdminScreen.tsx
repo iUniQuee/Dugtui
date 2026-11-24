@@ -23,7 +23,7 @@ import {
   type Room,
 } from '@/lib/supabase';
 import { Money, Spinner } from '@/components/Shell';
-import { FEE_RATE, formatMNT } from '@/lib/utils';
+import { FEE_RATE, WITHDRAW_FEE, formatMNT } from '@/lib/utils';
 import { useAuth } from '@/lib/useAuth';
 import {
   DEFAULT_BANK_SETTINGS,
@@ -740,7 +740,14 @@ export function AdminScreen() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-neutral-900">
                       {p.profile?.display_name ?? 'Хэрэглэгч'}
-                      <Money amount={p.amount} className="ml-2 text-emerald-600" />
+                    </p>
+                    <p className="mt-0.5 text-sm text-neutral-600">
+                      Хүссэн: <Money amount={p.amount} className="font-medium" /> · Банкны шимтгэл{' '}
+                      {WITHDRAW_FEE}₮ · Цэвэр шилжүүлэх:{' '}
+                      <Money
+                        amount={Math.max(0, p.amount - WITHDRAW_FEE)}
+                        className="font-semibold text-emerald-600"
+                      />
                     </p>
                     <p className="text-sm text-neutral-500 mt-0.5">
                       {p.bank_name ?? '—'} · {p.account_number ?? '—'}
