@@ -211,7 +211,7 @@ export function AuthModal({
 
 const EMAIL_RATE_LIMIT_TEXT =
   'Supabase-ийн и-мэйл илгээх хязгаар дүүрлээ (цагт хэдхэн мэйл илгээдэг). ' +
-  'Энэ хаяг аль хэдийн бүртгэгдсэн бол дахин бүртгүүлэх шаардлагагүй — нэвтрэх үед харуулсан алдааг дагана уу. ' +
+  'Энэ хаяг аль хэдийн бүртгэгдсэн бол дахин бүртгүүлэх шаардлагагүй. Нэвтрэх үед харуулсан алдааг дагана уу. ' +
   'Эсвэл Supabase → Authentication → Users дээрээс хаягийг шууд баталгаажуулж болно.';
 
 function isEmailRateLimited(err: { code?: string; status?: number; message: string }): boolean {
