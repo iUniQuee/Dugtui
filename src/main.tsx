@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { PullToRefresh } from './components/PullToRefresh';
 import './index.css';
 
 // PWA: service worker нь push мэдэгдэл хүлээж, аппыг утасны дэлгэцээс
@@ -15,6 +16,8 @@ if ('serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <PullToRefresh>
+      <App />
+    </PullToRefresh>
   </StrictMode>
 );
