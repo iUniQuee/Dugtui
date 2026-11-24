@@ -25,21 +25,21 @@ const MODES: {
     id: 'lucky_draw',
     icon: <MailOpen className="w-8 h-8 text-white" />,
     label: 'Азын дугтуй',
-    desc: 'Нийт дүнгээ оруулаад хүний тоог зааж өгөөд оролцогчид дугтуй задлан санамсаргүй мөнгөө хүртэнэ.',
+    desc: 'Нийт дүн болон оролцогчдын тоог оруулснаар найзууд тань дугтуйгаа задалж, азаа үзэн мөнгөө хувааж авна.',
     gradient: 'from-red-500 to-amber-500',
   },
   {
     id: 'group_pool',
     icon: <Users className="w-8 h-8 text-white" />,
     label: 'Хамтын бэлэг',
-    desc: 'Төрсөн өдрийн, хуримын эсвэл салхидалтын зардлыг нэг дор цуглуул. Хэн хэдэн төгрөг өгсөн нь ил харагдана.',
+    desc: 'Төрсөн өдөр, хурим зэрэг тэмдэглэлт баяраар найзуудтайгаа хамтдаа мөнгө нийлүүлж, нэг хүнд том бэлэг бариарай.',
     gradient: 'from-emerald-500 to-teal-600',
   },
   {
     id: 'gift_card',
     icon: <Gift className="w-8 h-8 text-white" />,
     label: 'Мэндчилгээт бэлэг',
-    desc: 'Ганц хүнд зураг, мэндчилгээний үгтэй цахим дугтуйгаар мөнгө бэлэглэ.',
+    desc: 'Хайртай дотно хүндээ баярын загвар, чин сэтгэлийн мэндчилгээтэй цахим дугтуйгаар мөнгө бэлэглээрэй.',
     gradient: 'from-sky-500 to-indigo-600',
   },
 ];
@@ -197,10 +197,10 @@ export function Landing({ onCreate }: { onCreate: (mode?: Mode) => void }) {
           </div>
           <div className="rounded-3xl bg-white border border-neutral-200 p-7">
             <MonitorSmartphone className="w-8 h-8 text-red-500" />
-            <h3 className="mt-3 font-bold text-lg">Гар утсанд тохиромжтой</h3>
+            <h3 className="mt-3 font-bold text-lg">Бүх төхөөрөмжид тохиромжтой</h3>
             <p className="mt-2 text-sm text-neutral-500 leading-relaxed">
-              Бүх дэлгэц гар утасны хэмжээнд зохион бүтээгдсэн. Хожсон болон цугларсан мөнгө
-              таны хэтэвчинд шууд орно.
+              Гар утас болон компьютерээс хаанаас ч ашиглахад хялбар. Хожсон болон цугларсан
+              мөнгө таны хэтэвчинд шууд орно.
             </p>
           </div>
         </div>
