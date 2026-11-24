@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { ArrowLeft, CreditCard, ImagePlus as ImageIcon, Sparkles, Wallet } from 'lucide-react';
+import { ArrowLeft, CreditCard, ImagePlus as ImageIcon, Wallet } from 'lucide-react';
 import { supabase, type Room } from '@/lib/supabase';
-import { GiftBg, Money } from '@/components/Shell';
+import { GiftBg } from '@/components/Shell';
 import { BankTransferModal } from '@/components/BankTransferModal';
 import { generatePaymentCode } from '@/lib/payments';
 import { notifyAdmin } from '@/lib/push';
 import { CreateRoomSuccess } from '@/screens/CreateRoomSuccess';
-import { CreateRoomModeTheme, MODE_LABELS, type Mode } from '@/screens/CreateRoomModeTheme';
+import { CreateRoomModeTheme, type Mode } from '@/screens/CreateRoomModeTheme';
 import { CreateRoomFeeSummary } from '@/screens/CreateRoomFeeSummary';
 import { CreateRoomAmounts } from '@/screens/CreateRoomAmounts';
-import { FEE_RATE, MIN_ROOM_AMOUNT, generateRoomCode, splitAmount, themeOf } from '@/lib/utils';
+import { FEE_RATE, MIN_ROOM_AMOUNT, generateRoomCode, splitAmount } from '@/lib/utils';
 import { useAuth } from '@/lib/useAuth';
 
 export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => void; initialMode?: Mode; onNeedAuth?: () => void }) {
@@ -42,7 +42,6 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
   const grand = totalNum + fee;
   const walletBalance = profile?.balance ?? 0;
   const walletEnough = walletBalance >= grand;
-  const activeTheme = themeOf(theme);
   const shareUrl = created ? `${window.location.origin}/?room=${created.code}` : '';
 
   const openPay = () => {
@@ -286,11 +285,6 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
                 placeholder="Баяр хүргэе!"
                 className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
               />
-              {!messageTouched && (
-                <p className="mt-1 text-xs text-amber-600 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Загвар сонгоход тохирох мэндчилгээ автоматаар бичигдэнэ.
-                </p>
-              )}
             </label>
             {mode === 'gift_card' && (
               <div>
