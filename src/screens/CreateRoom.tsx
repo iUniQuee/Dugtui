@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, CreditCard, ImagePlus as ImageIcon, Sparkles } from 'lucide-react';
+import { ArrowLeft, CreditCard, ImagePlus as ImageIcon, Sparkles, Wallet } from 'lucide-react';
 import { supabase, type Room } from '@/lib/supabase';
 import { GiftBg, Money } from '@/components/Shell';
 import { BankTransferModal } from '@/components/BankTransferModal';
@@ -13,7 +13,7 @@ import { FEE_RATE, generateRoomCode, splitAmount, themeOf } from '@/lib/utils';
 import { useAuth } from '@/lib/useAuth';
 
 export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => void; initialMode?: Mode; onNeedAuth?: () => void }) {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode ?? 'lucky_draw');
   const [title, setTitle] = useState('');
   const [theme, setTheme] = useState<Room['theme']>('shine_jil');
@@ -27,6 +27,7 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
   const [messageTouched, setMessageTouched] = useState(false);
 
   const [showPay, setShowPay] = useState(false);
+  const [payWithWallet, setPayWithWallet] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   const [paymentCode, setPaymentCode] = useState('');
   const [paying, setPaying] = useState(false);
@@ -39,6 +40,8 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
   const isFree = mode === 'group_pool'; // group gifts collect from members instead
   const fee = isFree ? 0 : Math.ceil(totalNum * FEE_RATE);
   const grand = totalNum + fee;
+  const walletBalance = profile?.balance ?? 0;
+  const walletEnough = walletBalance >= grand;
   const activeTheme = themeOf(theme);
   const shareUrl = created ? `${window.location.origin}/?room=${created.code}` : '';
 
@@ -58,7 +61,56 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
       void submitRoom();
       return;
     }
+    if (payWithWallet) {
+      if (!walletEnough) {
+        setError('Хэтэвчний үлдэгдэл хүрэлцэхгүй байна.');
+        return;
+      }
+      void submitRoomFromWallet();
+      return;
+    }
     setShowPay(true);
+  };
+
+  // Хэтэвчний үлдэгдлээр шууд төлж өрөө үүсгэх (QR/шилжүүлэггүй).
+  const submitRoomFromWallet = async () => {
+    if (!session) return;
+    setPaying(true);
+    setError('');
+    const amounts = mode === 'lucky_draw' ? splitAmount(totalNum, peopleNum, splitMode) : [];
+    const expiresAt =
+      mode === 'lucky_draw' ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() : null;
+
+    let room: Room | null = null;
+    let failure = 'Хэтэвчээр төлөхөд алдаа гарлаа. Дахин оролдоорой.';
+    for (let attempt = 0; attempt < 3 && !room; attempt += 1) {
+      const code =
+        attempt === 0 ? roomCode || generateRoomCode() : generateRoomCode();
+      const { data, error: err } = await supabase.rpc('create_room_from_wallet', {
+        p_code: code,
+        p_type: mode,
+        p_title: title.trim(),
+        p_theme: theme,
+        p_total_amount: totalNum,
+        p_fee_amount: fee,
+        p_participant_count: mode === 'lucky_draw' ? peopleNum : null,
+        p_mode: mode === 'lucky_draw' ? splitMode : null,
+        p_organizer_name: organizerName.trim() || null,
+        p_message: message.trim() || null,
+        p_image_url: imageUrl.trim() || null,
+        p_expires_at: expiresAt,
+        p_envelope_amounts: amounts,
+      });
+      if (data) room = data as Room;
+      else if (err?.code !== '23505') failure = `Алдаа: ${err?.message ?? 'тодорхойгүй'}`;
+    }
+
+    setPaying(false);
+    if (!room) {
+      setError(failure);
+      return;
+    }
+    setCreated(room);
   };
 
   const submitRoom = async (codeArg?: string) => {
@@ -271,6 +323,42 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
 
           <CreateRoomFeeSummary isFree={isFree} totalNum={totalNum} fee={fee} grand={grand} />
 
+          {session && !isFree && (
+            <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+              <p className="text-sm font-medium text-neutral-700">Төлбөрийн хэрэгсэл</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayWithWallet(false)}
+                  className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                    !payWithWallet
+                      ? 'border-neutral-900 bg-neutral-900 text-white'
+                      : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  Банкны QR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayWithWallet(true)}
+                  disabled={!walletEnough}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    payWithWallet
+                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                      : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  <Wallet className="w-4 h-4" /> Хэтэвч ({walletBalance.toLocaleString('mn-MN')}₮)
+                </button>
+              </div>
+              {!walletEnough && (
+                <p className="mt-2 text-xs text-neutral-400">
+                  Хэтэвчний үлдэгдэл {grand.toLocaleString('mn-MN')}₮-өөс бага тул QR-аар төлнө үү.
+                </p>
+              )}
+            </div>
+          )}
+
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
@@ -282,7 +370,9 @@ export function CreateRoom({ onHome, initialMode, onNeedAuth }: { onHome: () => 
               ? 'Нэвтрээд өрөө үүсгэх'
               : isFree
                 ? 'Үнэгүй үүсгэх'
-                : 'Банкны QR-аар төлөх'}
+                : payWithWallet
+                  ? `Хэтэвчээр төлөх (${grand.toLocaleString('mn-MN')}₮)`
+                  : 'Банкны QR-аар төлөх'}
           </button>
         </div>
       </div>

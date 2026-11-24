@@ -9,6 +9,8 @@ import {
   Hourglass,
   LogIn,
   Crown,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { supabase, type Room, type Envelope, type RoomParticipant } from '@/lib/supabase';
 import { useAuth } from '@/lib/useAuth';
@@ -43,6 +45,9 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [loading, setLoading] = useState(true);
   const [joinError, setJoinError] = useState('');
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState('');
   const startRequested = useRef(false);
 
   const load = useCallback(async () => {
@@ -95,6 +100,28 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
   const claimedByUser = new Map<string, number>();
   envelopes.forEach((e) => { if (e.claimed && e.claimed_by) claimedByUser.set(e.claimed_by, e.amount); });
   const deviceKey = `claimed_${room.code}`;
+  const isOwner = !!session && session.user.id === liveRoom.user_id;
+  const cancelled = liveRoom.status === 'CANCELLED';
+  const canCancel =
+    isOwner &&
+    !cancelled &&
+    (liveRoom.status === 'active' || liveRoom.status === 'PAID') &&
+    !isFull &&
+    claimedCount === 0;
+
+  const cancelRoom = async () => {
+    if (cancelBusy) return;
+    setCancelBusy(true);
+    setCancelError('');
+    const { error } = await supabase.rpc('cancel_room', { p_room_id: room.id });
+    setCancelBusy(false);
+    if (error) {
+      setCancelError(error.message);
+      return;
+    }
+    setCancelOpen(false);
+    await load();
+  };
 
   // Оролцогчид бүрэн бүрдсэн үед дугтуйг серверт хуваалгана (нэг л удаа).
   useEffect(() => {
@@ -109,7 +136,7 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
   }, [session, isFull, envelopes.length, room.id, load]);
 
   const pick = async (env: Envelope) => {
-    if (env.claimed || opening || !isFull) return;
+    if (env.claimed || opening || !isFull || cancelled) return;
     if (!session) { onNeedAuth(); return; }
     if (localStorage.getItem(deviceKey)) { alert('Та дугтуйгаа аль хэдийн задалсан байна!'); return; }
     setOpening(true);
@@ -200,6 +227,29 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
         <h1 className="text-2xl font-bold text-center text-neutral-900">{room.title}</h1>
         <p className="text-center text-sm text-neutral-500 mt-1">Сайн байна уу, {accountName || 'Оролцогч'}?</p>
 
+        {cancelled && (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-5 text-center">
+            <AlertTriangle className="w-8 h-8 text-red-500 mx-auto" />
+            <p className="mt-1 font-semibold text-red-900">Өрөө цуцлагдсан</p>
+            <p className="mt-1 text-sm text-red-800">
+              Өрөө үүсгэгчийн төлсөн мөнгө хэтэвчинд 100% буцаж орсон.
+            </p>
+          </div>
+        )}
+
+        {canCancel && (
+          <button
+            type="button"
+            onClick={() => {
+              setCancelError('');
+              setCancelOpen(true);
+            }}
+            className="mt-4 w-full rounded-xl border border-red-200 bg-red-50 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition-colors"
+          >
+            Өрөөг цуцлах
+          </button>
+        )}
+
         {/* оролцогчид / хүлээлгийн төлөв */}
         <div className="mt-6 rounded-2xl bg-white border border-neutral-200 shadow-sm p-4">
           <h2 className="text-sm font-semibold text-neutral-900 flex items-center gap-1.5">
@@ -288,7 +338,7 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
         </div>
 
         {/* дугтуйн сүлжээ — зөвхөн оролцогчдын тоо бүрэн бүрдсэний дараа */}
-        {isFull ? (
+        {cancelled ? null : isFull ? (
           <div className="mt-6 grid grid-cols-3 gap-3">
             {envelopes.map((env, i) => (
               <motion.button
@@ -341,6 +391,55 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
           <Sparkles className="w-4 h-4" /> Бодит цагт шинэчлэгдэж байна
         </p>
       </div>
+
+      {cancelOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-500">
+                  <AlertTriangle className="h-5 w-5" />
+                </span>
+                <h2 className="text-lg font-bold text-neutral-900">Өрөөг цуцлах уу?</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelOpen(false)}
+                className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-100"
+                aria-label="Хаах"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-3 text-sm text-neutral-600">
+              «{room.title}» өрөө цуцлагдаж, төлсөн мөнгө таны хэтэвчинд 100% буцаж орно. Энэ
+              үйлдлийг буцаах боломжгүй.
+            </p>
+            {cancelError && (
+              <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
+                {cancelError}
+              </p>
+            )}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelOpen(false)}
+                className="flex-1 rounded-xl border border-neutral-300 py-2.5 text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors"
+              >
+                Болих
+              </button>
+              <button
+                type="button"
+                onClick={() => void cancelRoom()}
+                disabled={cancelBusy}
+                className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-colors"
+              >
+                {cancelBusy ? 'Цуцалж байна...' : 'Тийм, цуцлах'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
