@@ -30,7 +30,8 @@ export async function loadBankSettings(): Promise<BankSettings> {
   const row = data as Partial<BankSettings>;
   return {
     bank_name: row.bank_name || DEFAULT_BANK_SETTINGS.bank_name,
-    account_number: row.account_number ?? '',
+    // Дансны дугаарыг IBAN шиг 4 оронтой бүлгээр буцаана.
+    account_number: formatAccountNumber(row.account_number ?? ''),
     account_name: row.account_name ?? '',
     qr_url: row.qr_url || DEFAULT_BANK_SETTINGS.qr_url,
   };
@@ -39,12 +40,27 @@ export async function loadBankSettings(): Promise<BankSettings> {
 export async function saveBankSettings(input: BankSettings): Promise<string> {
   const { error } = await supabase.rpc('save_platform_settings', {
     p_bank_name: input.bank_name,
-    p_account_number: input.account_number,
+    p_account_number: normalizeAccountNumber(input.account_number),
     p_account_name: input.account_name,
     p_qr_url: input.qr_url,
   });
   if (error) throw new Error(error.message);
   return 'Хадгалагдлаа';
+}
+
+/**
+ * Дансны дугаарыг IBAN шиг 4 оронтой бүлгээр харуулна: 9100 3800 8000 7575.
+ * Оруулсан таслалт, зайг үл харгалзан зөвхөн үсэг, цифрийг бүлэглэнэ.
+ */
+export function formatAccountNumber(value: string): string {
+  const compact = normalizeAccountNumber(value);
+  if (!compact) return '';
+  return compact.replace(/(.{4})/g, '$1 ').trim();
+}
+
+/** Хадгалахын өмнө дансны дугаараас зай, таслалтыг арилгана. */
+export function normalizeAccountNumber(value: string): string {
+  return (value || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
 }
 
 /** Гүйлгээний утга болох давтагдашгүй 6 оронтой код. */

@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, Check, Copy, Loader2, RefreshCw, X } from 'lucide-react';
-import { DEFAULT_BANK_SETTINGS, loadBankSettings, type BankSettings } from '@/lib/payments';
+import {
+  DEFAULT_BANK_SETTINGS,
+  formatAccountNumber,
+  loadBankSettings,
+  normalizeAccountNumber,
+  type BankSettings,
+} from '@/lib/payments';
 
 function formatMnt(n: number): string {
   return new Intl.NumberFormat('mn-MN').format(n) + '₮';
@@ -102,9 +108,9 @@ export function BankTransferModal({
           <InfoRow label="Банк" value={settings.bank_name} />
           <InfoRow
             label="Дансны дугаар"
-            value={settings.account_number || '—'}
+            value={formatAccountNumber(settings.account_number) || '—'}
             copied={copied === 'account'}
-            onCopy={() => void copy('account', settings.account_number)}
+            onCopy={() => void copy('account', normalizeAccountNumber(settings.account_number))}
           />
           <InfoRow
             label="Хүлээн авагч"
