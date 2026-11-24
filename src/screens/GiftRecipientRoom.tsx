@@ -3,29 +3,19 @@ import { motion } from 'framer-motion';
 import {
   AlertCircle,
   CheckCircle2,
-  Clock,
+  Copy,
   Gift,
-  Landmark,
+  Link2,
   Loader2,
+  Lock,
   MessageSquareHeart,
-  PencilLine,
-  Send,
+  Wallet,
+  XCircle,
 } from 'lucide-react';
 import { supabase, type Room, type RoomStatus } from '@/lib/supabase';
 import { GiftBg, Confetti, Money } from '@/components/Shell';
-import { formatAccountNumber, normalizeAccountNumber } from '@/lib/payments';
+import { useAuth } from '@/lib/useAuth';
 import { themeOf, formatMNT } from '@/lib/utils';
-
-export const BANKS = [
-  'Богд банк',
-  'Хаан банк',
-  'Голомт банк',
-  'Худалдаа хөгжлийн банк',
-  'Ариг банк',
-  'Капитрон банк',
-  'Хас банк',
-  'Төрийн банк',
-];
 
 interface GiftContribution {
   name: string;
@@ -55,41 +45,54 @@ interface GiftView {
     goal: number;
     raised: number;
   };
+  is_sender?: boolean;
+  claimed?: boolean;
+  claimed_by_me?: boolean;
   contributions: GiftContribution[];
   transfer: GiftTransfer | null;
+}
+
+interface ClaimResult {
+  room_id: string;
+  amount: number;
+  already: boolean;
 }
 
 /**
  * «Бэлгийн линк»-ээр орсон хүлээн авагчийн дэлгэц.
  *
- * Линкний токеныг `get_gift_by_token` RPC шалгана. Цугласан нийт дүн, бүх
- * мэндчилгээг харуулж, хүлээн авах дансаа бөглүүлнэ. Данс илгээгдмэгц админ
- * самбарт «Бэлэг шилжүүлэх хүсэлт» болж очно.
+ * 1. Линкээр орсон хүн нэвтрээгүй бол түгжээтэй цонх гарч, нэвтэрнэ.
+ * 2. Нэвтэрсний дараа дүн шууд харагдахгүй — зөвхөн битүү дугтуй.
+ * 3. «Бэлгээ задлах» дармагц `claim_group_gift` RPC нийт дүнг хэтэвчид
+ *    нэмж, дараа нь дүн болон мэндчилгээнүүд харагдана.
+ *
+ * Өрөө үүсгэсэн (илгээсэн) хүнд зөвхөн хяналтын мэдээлэл болон линк
+ * хуулах товч харагдана — бэлгийг өөрөө авч чадахгүй.
  */
-export function GiftRecipientRoom({ token }: { token: string }) {
+export function GiftRecipientRoom({
+  token,
+  onNeedAuth,
+  onWallet,
+}: {
+  token: string;
+  onNeedAuth: (tab?: 'login' | 'signup') => void;
+  onWallet: () => void;
+}) {
+  const { session } = useAuth();
   const [data, setData] = useState<GiftView | null>(null);
   const [loading, setLoading] = useState(true);
   const [invalid, setInvalid] = useState(false);
-
-  const [bankName, setBankName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-  const [accountName, setAccountName] = useState('');
-  const [editing, setEditing] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState('');
-  const [justSent, setJustSent] = useState(false);
+  const [revealed, setRevealed] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     const { data: res, error: err } = await supabase.rpc('get_gift_by_token', {
       p_token: token,
     });
-    if (err) {
-      setInvalid(true);
-      setLoading(false);
-      return;
-    }
-    if (!res) {
+    if (err || !res) {
       setInvalid(true);
       setLoading(false);
       return;
@@ -97,54 +100,56 @@ export function GiftRecipientRoom({ token }: { token: string }) {
     const view = res as GiftView;
     setData(view);
     setLoading(false);
-    if (view.transfer) {
-      setBankName(view.transfer.bank_name);
-      setAccountNumber(view.transfer.account_number);
-      setAccountName(view.transfer.account_name);
-      setEditing(false);
-    }
+    if (view.claimed_by_me) setRevealed(true);
   }, [token]);
 
+  // Нэвтрэлт солигдвол линкний мэдээллийг дахин татна (is_sender/claimed).
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, session?.user.id]);
 
-  // Админ «Шилжүүлсэн» дарсныг хүлээн авагч автоматаар харна.
   useEffect(() => {
-    if (!data?.transfer || data.transfer.status !== 'pending') return;
-    const timer = setInterval(() => void load(), 6000);
-    return () => clearInterval(timer);
-  }, [data?.transfer, load]);
-
-  // Бэлэг хүргэгдэж нээгдсэн үед 5 секунд салют буудна.
-  const delivered = !!data && (data.room.status === 'completed' || data.transfer?.status === 'paid');
-  useEffect(() => {
-    if (!delivered) return;
+    if (!revealed) return;
     setCelebrate(true);
     const timer = setTimeout(() => setCelebrate(false), 5000);
     return () => clearTimeout(timer);
-  }, [delivered]);
+  }, [revealed]);
 
-  const submit = async () => {
-    if (!bankName) return setError('Банкаа сонгоно уу.');
-    if (!normalizeAccountNumber(accountNumber)) return setError('Дансны дугаараа оруулна уу.');
-    if (!accountName.trim()) return setError('Хүлээн авагчийн нэрээ оруулна уу.');
-    setSaving(true);
+  const openGift = async () => {
+    if (claiming) return;
+    if (!session) {
+      onNeedAuth('login');
+      return;
+    }
+    setClaiming(true);
     setError('');
-    const { error: err } = await supabase.rpc('submit_gift_transfer', {
+    const { data: res, error: err } = await supabase.rpc('claim_group_gift', {
       p_token: token,
-      p_bank_name: bankName,
-      p_account_number: normalizeAccountNumber(accountNumber),
-      p_account_name: accountName.trim(),
     });
-    setSaving(false);
+    setClaiming(false);
     if (err) {
       setError(err.message);
       return;
     }
-    setJustSent(true);
-    setEditing(false);
+    if (res) {
+      const claim = res as ClaimResult;
+      setData((prev) =>
+        prev ? { ...prev, room: { ...prev.room, raised: claim.amount }, claimed_by_me: true } : prev
+      );
+    }
+    setRevealed(true);
     void load();
+  };
+
+  const giftUrl = `${window.location.origin}/?gift=${token}`;
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(giftUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard блоклогдсон бол алгасна */
+    }
   };
 
   if (loading) {
@@ -172,11 +177,134 @@ export function GiftRecipientRoom({ token }: { token: string }) {
     );
   }
 
-  const { room, contributions, transfer } = data;
+  const { room, contributions } = data;
   const theme = themeOf(room.theme);
-  const completed = room.status === 'completed' || transfer?.status === 'paid';
-  const sendForm = !completed && (!transfer || editing);
 
+  // ---- Илгээгч (өрөө үүсгэсэн) хүний хяналтын дэлгэц ----
+  if (data.is_sender) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GiftBg theme={room.theme} />
+        <div className="w-full max-w-md rounded-3xl bg-white shadow-xl border border-neutral-200 p-8 text-center">
+          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+          <h1 className="mt-4 text-xl font-bold text-neutral-900">Таны бэлэг илгээгдлээ</h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            «{room.title}» бэлэг хүлээн авагчид илгээгдсэн / хүлээгдэж байна.
+          </p>
+          {data.claimed && (
+            <p className="mt-1 text-sm font-medium text-emerald-600">
+              Хүлээн авагч бэлгээ авсан байна.
+            </p>
+          )}
+          <div className="mt-5 flex items-center gap-2 rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2.5 text-left">
+            <Link2 className="w-4 h-4 shrink-0 text-neutral-400" />
+            <span className="flex-1 min-w-0 truncate text-xs text-neutral-700">{giftUrl}</span>
+          </div>
+          <button
+            onClick={() => void copyLink()}
+            className="mt-3 w-full rounded-xl bg-neutral-900 text-white py-3 font-semibold hover:bg-neutral-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <Copy className="w-4 h-4" /> {copied ? 'Хуулагдлаа' : 'Линк хуулах'}
+          </button>
+          <p className="mt-2 text-xs text-neutral-400">
+            Линкээр орсон хүн бэлгээ задлахад мөнгө автоматаар түүний хэтэвчид орно.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Нэвтрээгүй: түгжээтэй цонх ----
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GiftBg theme={room.theme} />
+        <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl border border-neutral-200 p-8 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-50">
+            <Lock className="w-8 h-8 text-amber-500" />
+          </div>
+          <h1 className="mt-4 text-xl font-bold text-neutral-900">Танд бэлэг ирлээ!</h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            Бэлгээ задлахын тулд нэвтэрнэ үү / Бүртгүүлнэ үү.
+          </p>
+          <button
+            onClick={() => onNeedAuth('login')}
+            className="mt-6 w-full rounded-xl bg-neutral-900 text-white py-3 font-semibold hover:bg-neutral-700 transition-colors"
+          >
+            Нэвтрэх
+          </button>
+          <button
+            onClick={() => onNeedAuth('signup')}
+            className="mt-2 w-full rounded-xl border border-neutral-300 py-3 font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
+          >
+            Бүртгүүлэх
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Өөр хүн аль хэдийн авсан ----
+  if (data.claimed && !data.claimed_by_me) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GiftBg theme={room.theme} />
+        <div className="w-full max-w-sm rounded-3xl bg-white shadow-xl border border-neutral-200 p-8 text-center">
+          <XCircle className="w-12 h-12 text-neutral-300 mx-auto" />
+          <h1 className="mt-4 text-xl font-bold text-neutral-900">
+            Энэ бэлгийг аль хэдийн авсан байна
+          </h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            «{room.title}» бэлгийг өөр хэрэглэгч хүлээн авсан тул дахин авах боломжгүй.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Битүү дугтуй ----
+  if (!revealed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GiftBg theme={room.theme} />
+        <div className="text-center">
+          <motion.button
+            onClick={() => void openGift()}
+            disabled={claiming}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="relative"
+          >
+            <motion.div
+              animate={{ rotate: [-2, 2, -2], y: [0, -6, 0] }}
+              transition={{ repeat: Infinity, duration: 2.4 }}
+              className={`w-56 h-56 rounded-3xl shadow-2xl bg-gradient-to-br ${theme.gradient} flex items-center justify-center`}
+            >
+              <Gift className="w-20 h-20 text-white" />
+            </motion.div>
+          </motion.button>
+          <h1 className="mt-8 text-2xl font-bold text-neutral-900">Танд бэлэг ирлээ!</h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            {room.organizer_name ? `${room.organizer_name} · ` : ''}Дугтуйгаа дарж бэлгээ
+            задална уу.
+          </p>
+          {claiming && (
+            <p className="mt-3 text-sm text-emerald-600">Бэлгийг таны хэтэвчид хийж байна...</p>
+          )}
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+          <button
+            onClick={() => void openGift()}
+            disabled={claiming}
+            className="mt-6 w-full max-w-xs rounded-xl bg-neutral-900 text-white py-3 font-semibold hover:bg-neutral-700 disabled:opacity-50 transition-colors"
+          >
+            {claiming ? 'Задалж байна...' : 'Бэлгээ задлах'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Задарсан: дүн + мэндчилгээ + хэтэвч ----
   return (
     <div className="min-h-screen p-4">
       <GiftBg theme={room.theme} />
@@ -189,13 +317,10 @@ export function GiftRecipientRoom({ token }: { token: string }) {
           <h1 className="mt-3 text-2xl font-bold text-neutral-900">{room.title}</h1>
           {room.message && <p className="mt-2 text-sm text-neutral-500">{room.message}</p>}
           {room.organizer_name && (
-            <p className="mt-1 text-sm text-neutral-500">
-              Зохион байгуулагч: {room.organizer_name}
-            </p>
+            <p className="mt-1 text-sm text-neutral-500">Зохион байгуулагч: {room.organizer_name}</p>
           )}
         </div>
 
-        {/* Нийт дүн */}
         <motion.div
           layout
           className={`mt-6 rounded-3xl shadow-lg p-6 bg-gradient-to-br ${theme.gradient} text-white text-center`}
@@ -203,130 +328,24 @@ export function GiftRecipientRoom({ token }: { token: string }) {
           <p className="text-sm opacity-90">Танд цугласан бэлэг</p>
           <Money amount={room.raised} className="text-4xl font-extrabold" />
           <p className="mt-2 text-xs opacity-90">{contributions.length} хүний нэмэр</p>
-          {completed && (
-            <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-xs font-semibold">
-              <CheckCircle2 className="w-4 h-4" /> Хүргэгдсэн (Completed)
-            </div>
-          )}
         </motion.div>
 
-        {completed && (
-          <div className="mt-5 rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-            <p className="font-semibold text-emerald-900">Бэлэг хүргэгдлээ 🎉</p>
-            <p className="mt-1 text-sm text-emerald-800">
-              {formatMNT(room.raised)} таны данс руу шилжигдсэн байна. Баяр хүргэе!
-            </p>
-          </div>
-        )}
-
-        {/* Дансны хүсэлтийн төлөв */}
-        {!completed && transfer && !editing && (
-          <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 p-6">
-            <p className="font-semibold text-amber-900 flex items-center gap-2">
-              <Clock className="w-5 h-5" /> Данс илгээгдсэн — шилжүүлэг хийгдэж байна
-            </p>
-            <p className="mt-1 text-sm text-amber-800">
-              Админ {formatMNT(transfer.amount)}-г доорх данс руу шилжүүлсний дараа энэ хуудас
-              «Хүргэгдсэн» болно.
-            </p>
-            <dl className="mt-3 space-y-1 text-sm text-amber-900">
-              <div className="flex justify-between gap-3">
-                <dt className="text-amber-700">Банк</dt>
-                <dd className="font-medium">{transfer.bank_name}</dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-amber-700">Данс</dt>
-                <dd className="font-mono font-medium">
-                  {formatAccountNumber(transfer.account_number)}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt className="text-amber-700">Нэр</dt>
-                <dd className="font-medium">{transfer.account_name}</dd>
-              </div>
-            </dl>
-            <button
-              onClick={() => setEditing(true)}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-amber-300 px-4 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 transition-colors"
-            >
-              <PencilLine className="w-4 h-4" /> Дансны мэдээлэл засах
-            </button>
-          </div>
-        )}
-
-        {/* Дансны форм */}
-        {sendForm && (
-          <div className="mt-5 rounded-3xl border border-neutral-200 bg-white shadow p-6">
-            <h2 className="font-semibold text-neutral-900 flex items-center gap-2">
-              <Landmark className="w-5 h-5" /> Бэлэг хүлээн авах дансны мэдээлэл
-            </h2>
-            <p className="mt-1 text-xs text-neutral-500">
-              Цугласан дүнг энэ данс руу шилжүүлнэ. Мэдээллээ зөв бөглөнө үү.
-            </p>
-
-            <label className="mt-4 block">
-              <span className="text-xs font-medium text-neutral-600">Банк сонгох</span>
-              <select
-                value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-neutral-300 bg-white px-3 py-2.5 text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-              >
-                <option value="">— Банк сонгох —</option>
-                {BANKS.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="mt-3 block">
-              <span className="text-xs font-medium text-neutral-600">Дансны дугаар</span>
-              <input
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-                placeholder="5000 1234 5678"
-                inputMode="numeric"
-                className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2.5 font-mono text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-              />
-            </label>
-
-            <label className="mt-3 block">
-              <span className="text-xs font-medium text-neutral-600">Хүлээн авагчийн нэр</span>
-              <input
-                value={accountName}
-                onChange={(e) => setAccountName(e.target.value)}
-                placeholder="Овог Нэр"
-                className="mt-1 w-full rounded-xl border border-neutral-300 px-3 py-2.5 text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
-              />
-            </label>
-
-            {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-
-            <button
-              onClick={() => void submit()}
-              disabled={saving}
-              className="mt-4 w-full rounded-xl bg-gradient-to-r from-red-500 to-amber-500 text-white py-3 font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center justify-center gap-2"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              {saving ? 'Илгээж байна...' : 'Дансаа илгээх'}
-            </button>
-            {editing && transfer && (
-              <button
-                onClick={() => setEditing(false)}
-                className="mt-2 w-full rounded-xl border border-neutral-300 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-              >
-                Болих
-              </button>
-            )}
-          </div>
-        )}
-
-        {justSent && !completed && (
-          <p className="mt-3 text-center text-sm text-emerald-700">
-            Данс илгээгдлээ. Админ шилжүүлсний дараа мэдэгдэнэ.
+        <div className="mt-5 rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+          <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
+          <p className="mt-2 font-semibold text-emerald-900">
+            Мөнгө таны хэтэвчинд орлоо!
           </p>
-        )}
+          <p className="mt-1 text-sm text-emerald-800">
+            {formatMNT(room.raised)} таны «Миний хэтэвч» үлдэгдэлд нэмэгдлээ. Та Профайл → Хэтэвч
+            хэсгээс банкны данс руугаа татах боломжтой.
+          </p>
+          <button
+            onClick={onWallet}
+            className="mt-4 w-full rounded-xl bg-emerald-600 text-white py-3 font-semibold hover:bg-emerald-500 transition-colors flex items-center justify-center gap-2"
+          >
+            <Wallet className="w-4 h-4" /> Хэтэвч рүү
+          </button>
+        </div>
 
         {/* Мэндчилгээнүүд */}
         <div className="mt-6">
