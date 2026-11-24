@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
   Bell,
   BellRing,
   CheckCircle2,
@@ -8,6 +10,7 @@ import {
   ImagePlus,
   Landmark,
   RefreshCw,
+  Search,
   ShieldCheck,
   TrendingUp,
   Users,
@@ -50,7 +53,26 @@ interface TransferRow extends GiftTransfer {
   room?: { title: string; code: string; status: string } | null;
 }
 
-type Tab = 'income' | 'contributions' | 'transfers' | 'withdrawals';
+interface HistoryRow {
+  id: string;
+  kind: 'income' | 'expense';
+  source: 'lucky_draw' | 'gift_card' | 'group_pool' | 'gift_transfer' | 'payout';
+  reference_id: string;
+  room_id: string | null;
+  room_title: string | null;
+  payment_code: string | null;
+  actor_name: string | null;
+  bank_name: string | null;
+  account_number: string | null;
+  account_name: string | null;
+  amount: number;
+  fee_amount: number;
+  occurred_at: string;
+}
+
+type HistoryKind = 'all' | 'income' | 'expense';
+
+type Tab = 'income' | 'contributions' | 'history' | 'transfers' | 'withdrawals';
 
 export function AdminScreen() {
   const { session } = useAuth();
@@ -62,6 +84,9 @@ export function AdminScreen() {
   const [contributions, setContributions] = useState<ContributionRow[]>([]);
   const [transfers, setTransfers] = useState<TransferRow[]>([]);
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
+  const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [historyKind, setHistoryKind] = useState<HistoryKind>('all');
   const [stats, setStats] = useState({
     roomCount: 0,
     roomToday: 0,
@@ -82,7 +107,7 @@ export function AdminScreen() {
   const [pushMessage, setPushMessage] = useState('');
 
   const loadAdminData = useCallback(async () => {
-    const [pendingRes, contribRes, transferRes, payoutRes, roomsRes, profilesRes] =
+    const [pendingRes, contribRes, transferRes, payoutRes, historyRes, roomsRes, profilesRes] =
       await Promise.all([
         supabase
           .from('rooms')
@@ -105,6 +130,11 @@ export function AdminScreen() {
           .eq('type', 'payout')
           .order('created_at', { ascending: false })
           .limit(50),
+        supabase
+          .from('transaction_history')
+          .select('*')
+          .order('occurred_at', { ascending: false })
+          .limit(500),
         supabase.from('rooms').select('total_amount, fee_amount, created_at, status'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
       ]);
@@ -113,6 +143,7 @@ export function AdminScreen() {
     if (contribRes.data) setContributions(contribRes.data as ContributionRow[]);
     if (transferRes.data) setTransfers(transferRes.data as TransferRow[]);
     if (payoutRes.data) setPayouts(payoutRes.data as PayoutRow[]);
+    if (historyRes.data) setHistory(historyRes.data as HistoryRow[]);
     if (roomsRes.data) {
       const today = new Date().toDateString();
       const rs = roomsRes.data as { total_amount: number; fee_amount: number; created_at: string; status: string }[];
@@ -177,6 +208,11 @@ export function AdminScreen() {
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'rooms' },
+        () => void loadAdminData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transaction_history' },
         () => void loadAdminData()
       )
       .subscribe();
@@ -251,6 +287,7 @@ export function AdminScreen() {
     }
     setPayouts((rows) => rows.map((r) => (r.id === txId ? { ...r, status: 'completed' } : r)));
     setNotice('Шилжүүлэг батлагдаж, хэтэвчнээс хасагдлаа.');
+    void loadAdminData();
   };
 
   const enablePush = async () => {
@@ -296,6 +333,23 @@ export function AdminScreen() {
     setUploadingQr(false);
     setSettingsMessage('QR зураг хуулагдлаа. «Хадгалах» дарж бэхжүүлнэ үү.');
   };
+
+  const historySearch = historyQuery.trim().toLowerCase();
+  const filteredHistory = history.filter((h) => {
+    if (historyKind !== 'all' && h.kind !== historyKind) return false;
+    if (!historySearch) return true;
+    return (
+      (h.payment_code ?? '').toLowerCase().includes(historySearch) ||
+      (h.actor_name ?? '').toLowerCase().includes(historySearch) ||
+      (h.account_name ?? '').toLowerCase().includes(historySearch)
+    );
+  });
+  const historyIncome = filteredHistory
+    .filter((h) => h.kind === 'income')
+    .reduce((sum, h) => sum + h.amount, 0);
+  const historyExpense = filteredHistory
+    .filter((h) => h.kind === 'expense')
+    .reduce((sum, h) => sum + h.amount, 0);
 
   if (loading) return <Spinner />;
   if (!isAdmin)
@@ -451,16 +505,23 @@ export function AdminScreen() {
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard icon={<Users className="w-4 h-4" />} label="Бүртгэлтэй хэрэглэгч" value={String(stats.users)} />
           <StatCard icon={<Gift className="w-4 h-4" />} label="Өнөөдрийн өрөө" value={String(stats.roomToday)} />
-          <StatCard icon={<TrendingUp className="w-4 h-4" />} label="Батлагдсан гүйлгээ" value={formatMNT(stats.giftVolume)} />
+          <StatCard
+            icon={<TrendingUp className="w-4 h-4" />}
+            label="Батлагдсан гүйлгээ"
+            value={formatMNT(stats.giftVolume)}
+            hint="Түүх харах →"
+            onClick={() => setTab('history')}
+          />
           <StatCard icon={<TrendingUp className="w-4 h-4" />} label={`Шимтгэл (${(FEE_RATE * 100).toFixed(0)}%)`} value={formatMNT(stats.feeRevenue)} />
         </div>
 
         {/* tabs */}
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2 p-1 bg-neutral-100 rounded-xl">
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-5 gap-2 p-1 bg-neutral-100 rounded-xl">
           {(
             [
               ['income', 'Өрөөний төлбөр'],
               ['contributions', 'Хамтын бэлэг'],
+              ['history', 'Гүйлгээний түүх'],
               ['transfers', 'Бэлэг шилжүүлэх'],
               ['withdrawals', 'Мөнгө татах'],
             ] as const
@@ -713,18 +774,183 @@ export function AdminScreen() {
           </div>
         )}
 
+        {/* history — батлагдсан бүх орлого, зарлага */}
+        {tab === 'history' && (
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <input
+                    value={historyQuery}
+                    onChange={(e) => setHistoryQuery(e.target.value)}
+                    placeholder="6 оронтой код эсвэл хэрэглэгчийн нэрээр хайх"
+                    className="w-full rounded-xl border border-neutral-300 pl-9 pr-3 py-2.5 text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      ['all', 'Бүгд'],
+                      ['income', 'Орлого'],
+                      ['expense', 'Зарлага'],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      onClick={() => setHistoryKind(id)}
+                      className={`flex-1 sm:flex-none rounded-xl px-4 py-2.5 text-sm font-medium transition-colors ${
+                        historyKind === id
+                          ? 'bg-neutral-900 text-white'
+                          : 'border border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                <span className="text-neutral-500">Нийт {filteredHistory.length} гүйлгээ</span>
+                <span className="text-emerald-700">Орлого {formatMNT(historyIncome)}</span>
+                <span className="text-rose-700">Зарлага {formatMNT(historyExpense)}</span>
+              </div>
+            </div>
+
+            {filteredHistory.length === 0 ? (
+              <p className="text-sm text-neutral-400">Тохирох гүйлгээ байхгүй.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
+                <table className="w-full min-w-[880px] text-sm">
+                  <thead>
+                    <tr className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
+                      <th className="px-4 py-3 font-medium">Огноо</th>
+                      <th className="px-4 py-3 font-medium">Төрөл</th>
+                      <th className="px-4 py-3 font-medium">Хэрэглэгч</th>
+                      <th className="px-4 py-3 font-medium">Утга / Өрөө</th>
+                      <th className="px-4 py-3 font-medium text-right">Дүн</th>
+                      <th className="px-4 py-3 font-medium text-right">Шимтгэл</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {filteredHistory.map((h) => (
+                      <tr key={h.id} className="align-top">
+                        <td className="px-4 py-3 whitespace-nowrap text-neutral-600">
+                          {new Date(h.occurred_at).toLocaleString('mn-MN')}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${
+                              h.kind === 'income'
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                : 'bg-rose-50 border-rose-200 text-rose-700'
+                            }`}
+                          >
+                            {h.kind === 'income' ? (
+                              <ArrowDownLeft className="w-3.5 h-3.5" />
+                            ) : (
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                            )}
+                            {h.kind === 'income' ? 'Орлого' : 'Зарлага'}
+                          </span>
+                          <p className="mt-1 text-xs text-neutral-500">
+                            {historySourceLabel(h.source)}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-neutral-800">
+                          <p className="font-medium">{h.actor_name ?? '—'}</p>
+                          {h.kind === 'expense' && (
+                            <p className="mt-0.5 text-xs text-neutral-500">
+                              {h.bank_name ?? '—'} ·{' '}
+                              <span className="font-mono">
+                                {h.account_number ? formatAccountNumber(h.account_number) : '—'}
+                              </span>
+                              {h.account_name ? ` · ${h.account_name}` : ''}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="font-mono font-semibold tracking-widest text-neutral-900">
+                            {h.payment_code ?? '—'}
+                          </p>
+                          <p className="mt-0.5 text-xs text-neutral-500">
+                            {h.room_title ?? '—'}
+                          </p>
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-right font-semibold whitespace-nowrap ${
+                            h.kind === 'income' ? 'text-emerald-600' : 'text-rose-600'
+                          }`}
+                        >
+                          {h.kind === 'income' ? '+' : '−'}
+                          {formatMNT(h.amount)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-neutral-600 whitespace-nowrap">
+                          {formatMNT(h.fee_amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );
 }
 
-function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+function historySourceLabel(source: HistoryRow['source']) {
+  switch (source) {
+    case 'lucky_draw':
+      return 'Азын дугтуй';
+    case 'gift_card':
+      return 'Бэлгийн карт';
+    case 'group_pool':
+      return 'Хамтын бэлэг';
+    case 'gift_transfer':
+      return 'Бэлэг шилжүүлэх';
+    case 'payout':
+      return 'Мөнгө таталт';
+  }
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  hint,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
       <p className="flex items-center gap-1.5 text-xs text-neutral-500">
         {icon} {label}
       </p>
       <p className="mt-1.5 font-bold text-neutral-900 text-lg leading-tight">{value}</p>
-    </div>
+      {hint && <p className="mt-1 text-[11px] text-neutral-400">{hint}</p>}
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-2xl border border-neutral-200 bg-white p-4 text-left hover:border-emerald-300 hover:shadow-sm transition"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="rounded-2xl border border-neutral-200 bg-white p-4">{content}</div>;
 }
