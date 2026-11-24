@@ -97,6 +97,7 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
   const winners = envelopes.filter((e) => e.claimed).sort((a, b) => b.amount - a.amount);
   const claimedCount = winners.length;
   const total = envelopes.length || required || 0;
+
   const claimedByUser = new Map<string, number>();
   envelopes.forEach((e) => { if (e.claimed && e.claimed_by) claimedByUser.set(e.claimed_by, e.amount); });
   const deviceKey = `claimed_${room.code}`;
@@ -186,22 +187,42 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
   }
 
   if (picked && revealed) {
+    // 0₮ (хоосон дугтуй) таарсан бол хөгжилтэй мэдэгдэл харуулж, татах товчийг нуулна.
+    const isEmpty = picked.amount <= 0;
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <GiftBg theme={room.theme} />
-        <Confetti />
+        {!isEmpty && <Confetti />}
         <div className="bg-white/95 rounded-3xl shadow-2xl border border-neutral-200 p-8 w-full max-w-sm text-center">
           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', bounce: 0.5 }}>
-            <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
+            {isEmpty ? (
+              <span className="text-6xl">😜</span>
+            ) : (
+              <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
+            )}
           </motion.div>
-          <p className="mt-4 text-neutral-500">Баяр хүргэе, {picked.claimed_by_name}!</p>
-          <Money amount={picked.amount} className="block text-4xl font-extrabold text-neutral-900 mt-2" />
-          <button onClick={() => setShowWithdraw(true)} className="mt-6 w-full rounded-xl bg-emerald-600 text-white py-3 font-semibold hover:bg-emerald-500 transition-colors">
-            Мөнгөө татах
-          </button>
-          <p className="mt-3 text-xs text-neutral-400">Данс руу шууд шилжинэ. Нэг л удаа татаж болно.</p>
+          {isEmpty ? (
+            <>
+              <p className="mt-4 text-lg font-bold text-neutral-900">
+                Аз чинь дараагийн удаа ирнэ ээ! 😜
+              </p>
+              <p className="mt-2 text-sm text-neutral-500">
+                Энэ дугтуй хоосон таарлаа. Дараагийн тоглоомд аз тань ирээрэй!
+              </p>
+              <Money amount={0} className="block text-2xl font-extrabold text-neutral-400 mt-4" />
+            </>
+          ) : (
+            <>
+              <p className="mt-4 text-neutral-500">Баяр хүргэе, {picked.claimed_by_name}!</p>
+              <Money amount={picked.amount} className="block text-4xl font-extrabold text-neutral-900 mt-2" />
+              <button onClick={() => setShowWithdraw(true)} className="mt-6 w-full rounded-xl bg-emerald-600 text-white py-3 font-semibold hover:bg-emerald-500 transition-colors">
+                Мөнгөө татах
+              </button>
+              <p className="mt-3 text-xs text-neutral-400">Данс руу шууд шилжинэ. Нэг л удаа татаж болно.</p>
+            </>
+          )}
         </div>
-        {showWithdraw && (
+        {showWithdraw && !isEmpty && (
           <WithdrawModal roomId={room.id} envelopeId={picked.id} name={picked.claimed_by_name ?? accountName} amount={picked.amount} onClose={() => setShowWithdraw(false)} />
         )}
       </div>
