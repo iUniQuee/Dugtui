@@ -67,6 +67,23 @@ export interface Contribution {
   name: string;
   amount: number;
   message: string | null;
+  status: 'PENDING_APPROVAL' | 'PAID' | 'REJECTED';
+  payment_code: string | null;
+  user_id: string | null;
+  payment_reviewed_at: string | null;
+  reject_reason: string | null;
+  created_at: string;
+}
+
+export interface GiftTransfer {
+  id: string;
+  room_id: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  amount: number;
+  status: 'pending' | 'paid';
+  paid_at: string | null;
   created_at: string;
 }
 

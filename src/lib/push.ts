@@ -78,41 +78,44 @@ export async function enableAdminPush(): Promise<string> {
   const { error } = await supabase.from('push_subscriptions').upsert(
     {
       user_id: session.user.id,
-      endpoint: subscription.endpoint,
-      p256dh: json.keys?.p256dh ?? '',
-      auth: json.keys?.auth ?? '',
-      user_agent: navigator.userAgent.slice(0, 200),
+      endpoint: json.endpoint,
+      p256dh: json.keys?.p256dh,
+      auth: json.keys?.auth,
     },
     { onConflict: 'endpoint' }
   );
   if (error) throw new Error(error.message);
-
-  return 'Мэдэгдэл тохируулагдлаа. Төлбөр, татах хүсэлт ирэхэд утсан дээр мэдэгдэнэ.';
+  return 'Энэ төхөөрөмж мэдэгдэл хүлээн авахаар бүртгэгдлээ.';
 }
 
 /**
- * Админы утсанд push илгээхийг серверээс хүснэ. Алдаа гарвал төлбөрийн
+ * Админ руу push илгээнэ. Мэдэгдэл бүтэхгүй бол ч хэрэглэгчийн үндсэн
  * урсгалыг зогсоохгүй (мэдэгдэл бол нэмэлт).
  */
 export async function notifyAdmin(
-  payload: { kind: 'payment'; roomId: string } | { kind: 'withdrawal'; amount: number }
+  payload:
+    | { kind: 'payment'; roomId: string }
+    | { kind: 'withdrawal'; amount: number }
+    | { kind: 'contribution'; contributionId: string }
 ): Promise<void> {
   try {
     const {
       data: { session },
     } = await supabase.auth.getSession();
     if (!session) return;
+    const body =
+      payload.kind === 'payment'
+        ? { kind: 'payment', room_id: payload.roomId }
+        : payload.kind === 'withdrawal'
+          ? { kind: 'withdrawal', amount: payload.amount }
+          : { kind: 'contribution', contribution_id: payload.contributionId };
     await fetch('/api/push/notify', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify(
-        payload.kind === 'payment'
-          ? { kind: 'payment', room_id: payload.roomId }
-          : { kind: 'withdrawal', amount: payload.amount }
-      ),
+      body: JSON.stringify(body),
     });
   } catch {
     /* push тохируулаагүй ч үндсэн урсгал үргэлжилнэ */
