@@ -246,7 +246,7 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
   const shareLink = async () => {
     if (!giftUrl) return;
     const shareData = {
-      title: `${room.title} — хамтын бэлэг`,
+      title: `${room.title} · хамтын бэлэг`,
       text: 'Бэлэг танд ирлээ! Линкээр орж бэлгээ задраарай.',
       url: giftUrl,
     };
@@ -273,7 +273,7 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
         )}
         <p className="text-center text-sm text-neutral-500 mt-1">
           {room.organizer_name ? `${room.organizer_name} · ` : ''}
-          Хамтдаа цуглуулъя — нэмэрээ үлдээгээрэй!
+          Хамтдаа цуглуулъя, нэмэрээ үлдээгээрэй!
         </p>
 
         {canCancel && (
@@ -343,7 +343,7 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
           </div>
         )}
 
-        {/* Зорилго биелсэн — нэмэр хаах + хүлээн авагчийн линк */}
+        {/* Зорилго биелсэн, нэмэр хаах + хүлээн авагчийн линк */}
         {!completed && goalReached && (
           <div className="mt-6 bg-white/90 backdrop-blur rounded-3xl border border-neutral-200 shadow p-6">
             <h2 className="font-semibold text-neutral-900 flex items-center gap-2">
