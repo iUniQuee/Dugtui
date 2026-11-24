@@ -39,7 +39,11 @@ export function AuthModal({
     const { error: err } = await supabase.auth.resend({ type: 'signup', email: email.trim() });
     setResending(false);
     if (err) {
-      setError('Баталгаажуулах и-мэйл илгээж чадсангүй: ' + err.message);
+      setError(
+        isEmailRateLimited(err)
+          ? EMAIL_RATE_LIMIT_TEXT
+          : 'Баталгаажуулах и-мэйл илгээж чадсангүй: ' + err.message
+      );
       return;
     }
     setInfo('Баталгаажуулах холбоосыг ' + email.trim() + ' хаяг руу дахин илгээлээ. Spam хавтсаа ч шалгана уу.');
@@ -65,7 +69,7 @@ export function AuthModal({
       });
       setBusy(false);
       if (err) {
-        setError(signUpErrorText(err.message));
+        setError(isEmailRateLimited(err) ? EMAIL_RATE_LIMIT_TEXT : signUpErrorText(err.message));
         return;
       }
       // И-мэйл баталгаажуулалт шаарддаг үед session үүсэхгүй.
@@ -202,6 +206,19 @@ export function AuthModal({
         </div>
       </motion.div>
     </div>
+  );
+}
+
+const EMAIL_RATE_LIMIT_TEXT =
+  'Supabase-ийн и-мэйл илгээх хязгаар дүүрлээ (цагт хэдхэн мэйл илгээдэг). ' +
+  'Энэ хаяг аль хэдийн бүртгэгдсэн бол дахин бүртгүүлэх шаардлагагүй — нэвтрэх үед харуулсан алдааг дагана уу. ' +
+  'Эсвэл Supabase → Authentication → Users дээрээс хаягийг шууд баталгаажуулж болно.';
+
+function isEmailRateLimited(err: { code?: string; status?: number; message: string }): boolean {
+  return (
+    err.code === 'over_email_send_rate_limit' ||
+    err.status === 429 ||
+    /rate limit/i.test(err.message)
   );
 }
 
