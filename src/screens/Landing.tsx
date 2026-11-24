@@ -199,7 +199,8 @@ export function Landing({ onCreate }: { onCreate: (mode?: Mode) => void }) {
             <MonitorSmartphone className="w-8 h-8 text-red-500" />
             <h3 className="mt-3 font-bold text-lg">Гар утсанд тохиромжтой</h3>
             <p className="mt-2 text-sm text-neutral-500 leading-relaxed">
-              Хожсон болон цугларсан мөнгө таны хэтэвчинд шууд орно.
+              Бүх дэлгэц гар утасны хэмжээнд зохион бүтээгдсэн. Хожсон болон цугларсан мөнгө
+              таны хэтэвчинд шууд орно.
             </p>
           </div>
         </div>
