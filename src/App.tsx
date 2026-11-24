@@ -12,6 +12,7 @@ import { AdminScreen } from '@/screens/AdminScreen';
 import { AuthModal } from '@/components/AuthModal';
 import { Header } from '@/components/Header';
 import { ErrorState, Spinner } from '@/components/Shell';
+import { useRefreshToken } from '@/lib/refresh';
 
 type View =
   | { page: 'home' }
@@ -40,6 +41,8 @@ function App() {
   const [notFound, setNotFound] = useState(false);
   const [authTab, setAuthTab] = useState<'login' | 'signup' | null>(null);
   const { session, profile, isAdmin, signOut } = useAuth();
+  // Доош чирч шинэчлэхэд token нэмэгдэж, дэлгэцүүд дахин mount болж өгөгдлөө татна.
+  const refreshToken = useRefreshToken();
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -70,7 +73,7 @@ function App() {
         else setNotFound(true);
         setLoading(false);
       });
-  }, [view]);
+  }, [view, refreshToken]);
 
   // Дээд цэсний товч — хаяг дээрх хуучин ?room=… (болон бусад query)-ийг
   // бүрэн цэвэрлэж, зөвхөн үндсэн зам (+ hash) руу шилжинэ.
@@ -106,6 +109,7 @@ function App() {
       <>
         {nav}
         <GiftRecipientRoom
+          key={refreshToken}
           token={view.token}
           onNeedAuth={(tab) => setAuthTab(tab ?? 'login')}
           onWallet={() => goTo({ page: 'profile' }, '#profile')}
@@ -130,6 +134,7 @@ function App() {
       <>
         {nav}
         <ProfileScreen
+          key={refreshToken}
           profile={profile}
           userId={session.user.id}
           isAdmin={isAdmin}
@@ -145,7 +150,7 @@ function App() {
     return (
       <>
         {nav}
-        <AdminScreen />
+        <AdminScreen key={refreshToken} />
         {authModal}
       </>
     );
@@ -159,7 +164,12 @@ function App() {
       return (
         <>
           {nav}
-          <LuckyDrawRoom room={room} onNeedAuth={() => setAuthTab('signup')} onHome={goHome} />
+          <LuckyDrawRoom
+            key={refreshToken}
+            room={room}
+            onNeedAuth={() => setAuthTab('signup')}
+            onHome={goHome}
+          />
           {authModal}
         </>
       );
@@ -167,7 +177,7 @@ function App() {
       return (
         <>
           {nav}
-          <GroupPoolRoom room={room} onNeedAuth={() => setAuthTab('signup')} />
+          <GroupPoolRoom key={refreshToken} room={room} onNeedAuth={() => setAuthTab('signup')} />
           {authModal}
         </>
       );
@@ -175,6 +185,7 @@ function App() {
       <>
         {nav}
         <GiftCardRoom
+          key={refreshToken}
           room={room}
           onNeedAuth={(tab) => setAuthTab(tab ?? 'login')}
           onWallet={() => goTo({ page: 'profile' }, '#profile')}
