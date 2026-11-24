@@ -12,6 +12,14 @@
 
 const encoder = new TextEncoder();
 
+// VAPID public key нь нийтэд нээлттэй утга. Серверт env тохируулаагүй ч
+// browser-т өгөх, JWT-ийн `k=` талбарт хийх энэ нөөц утгыг ашиглана.
+export const DEFAULT_VAPID_PUBLIC_KEY = 'BCo56aVOjAkTETbPUHJfSGODJdoTsG0i5zRUq3mdHnRoy2VhqFokAIRTBndK_Iju4T1aLBLH2w9NJfY3DyTeFg0';
+
+export function vapidPublicKey(env) {
+  return env.VAPID_PUBLIC_KEY || DEFAULT_VAPID_PUBLIC_KEY;
+}
+
 export function b64urlToBytes(value) {
   if (!value) return new Uint8Array(0);
   const normalized = String(value).replace(/-/g, '+').replace(/_/g, '/');
@@ -40,7 +48,7 @@ function concatBytes(...parts) {
 }
 
 async function importVapidPrivateKey(env) {
-  const publicKey = b64urlToBytes(env.VAPID_PUBLIC_KEY);
+  const publicKey = b64urlToBytes(vapidPublicKey(env));
   const privateKey = b64urlToBytes(env.VAPID_PRIVATE_KEY);
   if (publicKey.length !== 65 || privateKey.length !== 32) {
     throw new Error('VAPID түлхүүр буруу форматтай байна');
@@ -84,7 +92,7 @@ async function buildVapidHeaders(endpoint, env) {
     encoder.encode(signingInput)
   );
   const jwt = `${signingInput}.${bytesToB64url(new Uint8Array(signature))}`;
-  return { Authorization: `vapid t=${jwt}, k=${env.VAPID_PUBLIC_KEY}` };
+  return { Authorization: `vapid t=${jwt}, k=${vapidPublicKey(env)}` };
 }
 
 /** RFC 8291: subscription-ийн түлхүүрээр payload-ыг aes128gcm болгож шифрлэнэ. */
