@@ -17,6 +17,8 @@ export function AuthModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const googleLogin = async () => {
     setBusy(true);
@@ -31,16 +33,29 @@ export function AuthModal({
     }
   };
 
+  const resendConfirmation = async () => {
+    setResending(true);
+    setError('');
+    const { error: err } = await supabase.auth.resend({ type: 'signup', email: email.trim() });
+    setResending(false);
+    if (err) {
+      setError('Баталгаажуулах и-мэйл илгээж чадсангүй: ' + err.message);
+      return;
+    }
+    setInfo('Баталгаажуулах холбоосыг ' + email.trim() + ' хаяг руу дахин илгээлээ. Spam хавтсаа ч шалгана уу.');
+  };
+
   const submit = async () => {
     setError('');
     setInfo('');
+    setNeedsConfirm(false);
     if (!email.trim() || !password) {
       setError('И-мэйл болон нууц үгээ бүрэн оруулна уу.');
       return;
     }
     setBusy(true);
     if (tab === 'signup') {
-      const { error: err } = await supabase.auth.signUp({
+      const { data, error: err } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: { data: { display_name: displayName.trim() } },
@@ -50,7 +65,17 @@ export function AuthModal({
         setError(signUpErrorText(err.message));
         return;
       }
-      setInfo('Амжилттай бүртгэгдлээ! Одоо нэвтэрч орно уу.');
+      // И-мэйл баталгаажуулалт шаарддаг үед session үүсэхгүй.
+      if (data.session) {
+        onClose();
+        return;
+      }
+      setInfo(
+        'Бүртгэл үүслээ. ' +
+          email.trim() +
+          ' хаяг руу илгээсэн баталгаажуулах холбоосыг дарж баталгаажуулсны дараа нэвтэрнэ үү.'
+      );
+      setNeedsConfirm(true);
       setTab('login');
       return;
     }
@@ -60,7 +85,16 @@ export function AuthModal({
     });
     setBusy(false);
     if (err) {
-      setError('И-мэйл эсвэл нууц үг буруу байна.');
+      if (isEmailNotConfirmed(err)) {
+        setError(
+          'И-мэйл хаяг баталгаажаагүй байна. ' +
+            email.trim() +
+            ' хаяг руу илгээсэн баталгаажуулах холбоосыг дарна уу.'
+        );
+        setNeedsConfirm(true);
+        return;
+      }
+      setError(loginErrorText(err));
       return;
     }
     onClose();
@@ -131,6 +165,15 @@ export function AuthModal({
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {info && <p className="text-sm text-emerald-600">{info}</p>}
+          {needsConfirm && (
+            <button
+              onClick={() => void resendConfirmation()}
+              disabled={resending || !email.trim()}
+              className="text-xs font-medium text-neutral-700 underline disabled:opacity-50"
+            >
+              {resending ? 'Илгээж байна...' : 'Баталгаажуулах и-мэйлийг дахин илгээх'}
+            </button>
+          )}
 
           <button
             onClick={submit}
@@ -157,6 +200,16 @@ export function AuthModal({
       </motion.div>
     </div>
   );
+}
+
+function isEmailNotConfirmed(err: { code?: string; message: string }): boolean {
+  return err.code === 'email_not_confirmed' || /email not confirmed/i.test(err.message);
+}
+
+function loginErrorText(err: { code?: string; message: string }): string {
+  if (err.code === 'invalid_credentials' || /invalid login credentials/i.test(err.message))
+    return 'И-мэйл эсвэл нууц үг буруу байна.';
+  return 'Нэвтрэхэд алдаа гарлаа: ' + err.message;
 }
 
 function signUpErrorText(message: string): string {
