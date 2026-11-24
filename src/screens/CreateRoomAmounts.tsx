@@ -1,5 +1,6 @@
 import { Money } from '@/components/Shell';
 import type { Mode } from '@/screens/CreateRoomModeTheme';
+import { MIN_ROOM_AMOUNT, SPLIT_UNIT } from '@/lib/utils';
 
 /** Дүн, оролцогчдын тоо болон хуваарилалтын төрөл сонгох хэсэг. */
 export function CreateRoomAmounts({
@@ -38,6 +39,11 @@ export function CreateRoomAmounts({
             placeholder="200000"
             className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
           />
+          {mode !== 'gift_card' && totalNum > 0 && totalNum < MIN_ROOM_AMOUNT && (
+            <span className="mt-1 block text-xs text-amber-600">
+              Хамгийн багадаа {MIN_ROOM_AMOUNT.toLocaleString('mn-MN')}₮ оруулах боломжтой.
+            </span>
+          )}
         </label>
         {mode === 'lucky_draw' ? (
           <label className="block">
@@ -87,7 +93,18 @@ export function CreateRoomAmounts({
           </div>
           {totalNum > 0 && peopleNum > 0 && splitMode === 'equal' && (
             <p className="mt-2 text-sm text-neutral-500">
-              Хүн бүрд <Money amount={Math.floor(totalNum / peopleNum)} className="font-semibold" /> хүртэнэ.
+              Хүн бүрд{' '}
+              <Money
+                amount={Math.floor(totalNum / SPLIT_UNIT / peopleNum) * SPLIT_UNIT}
+                className="font-semibold"
+              />{' '}
+              хүртэнэ.
+            </p>
+          )}
+          {totalNum > 0 && peopleNum > 0 && splitMode === 'random' && (
+            <p className="mt-2 text-xs text-neutral-500">
+              Нийт дүн оролцогчдод 100₮-өөр бүхэлдсэн дүнгээр бүрэн хуваарилагдана. Азгүй
+              оролцогчид 0₮ (хоосон дугтуй) таарч болно.
             </p>
           )}
         </div>
