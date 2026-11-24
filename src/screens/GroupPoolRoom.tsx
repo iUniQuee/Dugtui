@@ -20,7 +20,7 @@ import { BankTransferModal } from '@/components/BankTransferModal';
 import { generatePaymentCode } from '@/lib/payments';
 import { notifyAdmin } from '@/lib/push';
 import { useAuth } from '@/lib/useAuth';
-import { themeOf, formatMNT } from '@/lib/utils';
+import { themeOf, formatMNT, MIN_CONTRIBUTION_AMOUNT } from '@/lib/utils';
 
 export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: () => void }) {
   const theme = themeOf(room.theme);
@@ -109,6 +109,7 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
   const completed = liveStatus === 'completed';
   const cancelled = liveStatus === 'CANCELLED';
   const walletBalance = profile?.balance ?? 0;
+  const amountNum = parseInt(amount.replace(/\D/g, ''), 10) || 0;
   const canCancel =
     isOwner &&
     !cancelled &&
@@ -161,6 +162,11 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
     const amt = parseInt(amount.replace(/\D/g, ''), 10);
     if (!name.trim()) return setError('Нэрээ оруулна уу.');
     if (!amt || amt <= 0) return setError('Зөв мөнгөн дүн оруулна уу.');
+    if (amt < MIN_CONTRIBUTION_AMOUNT) {
+      return setError(
+        `Хамгийн багадаа ${MIN_CONTRIBUTION_AMOUNT.toLocaleString('mn-MN')}₮ нэмэр оруулах боломжтой.`
+      );
+    }
     if (goalReached) return setError('Зорилго биелсэн тул нэмэр авахыг хаасан байна.');
     if (payWithWallet && walletBalance < amt) {
       return setError('Хэтэвчний үлдэгдэл хүрэлцэхгүй байна.');
@@ -422,6 +428,16 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
                 className="rounded-xl border border-neutral-300 px-3 py-2.5 text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
               />
             </div>
+            {amountNum > 0 && amountNum < MIN_CONTRIBUTION_AMOUNT ? (
+              <p className="mt-2 text-xs text-amber-600">
+                Хамгийн багадаа {MIN_CONTRIBUTION_AMOUNT.toLocaleString('mn-MN')}₮ нэмэр оруулах
+                боломжтой.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-neutral-400">
+                Нэг удаагийн нэмрийн доод дүн {MIN_CONTRIBUTION_AMOUNT.toLocaleString('mn-MN')}₮.
+              </p>
+            )}
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
