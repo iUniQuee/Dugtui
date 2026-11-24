@@ -135,10 +135,6 @@ function App() {
             setView({ page: 'admin' });
           }}
           onOpenRoom={(code) => setView({ page: 'room', code })}
-          onLogout={() => {
-            signOut();
-            goHome();
-          }}
         />
         {authModal}
       </>
