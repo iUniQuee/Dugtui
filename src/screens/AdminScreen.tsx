@@ -208,14 +208,13 @@ export function AdminScreen() {
             <p className="font-semibold">Supabase функц ажиллахгүй байна:</p>
             <p className="mt-1 break-words font-mono">{isAdminError}</p>
             <p className="mt-2">
-              <b>supabase/migrations/20261120160000_admin_access_and_payment_columns.sql</b>{' '}
-              файлыг Supabase → SQL Editor дээр ажиллуулна уу.
+              <b>supabase/ALL_IN_ONE_SETUP.sql</b> файлыг Supabase → SQL Editor дээр ажиллуулна уу.
             </p>
           </div>
         ) : (
           <p className="mt-3 text-xs text-neutral-400">
-            Админ эрх авахын тулд migration файлын «1-Р АЛХАМ» хэсгийн SQL-ийг
-            өөрийн email-ээр ажиллуулна уу.
+            Админ эрх авахын тулд <b>supabase/ALL_IN_ONE_SETUP.sql</b> файлын
+            «АЛХАМ 2» хэсгийн SQL-д өөрийн email-ээ оруулаад ажиллуулна уу.
           </p>
         )}
       </div>
