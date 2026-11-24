@@ -247,7 +247,7 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
     if (!giftUrl) return;
     const shareData = {
       title: `${room.title} — хамтын бэлэг`,
-      text: 'Бэлгийг хүлээн авах дансаа энд бөглөнө үү.',
+      text: 'Бэлэг танд ирлээ! Линкээр орж бэлгээ задраарай.',
       url: giftUrl,
     };
     if (navigator.share) {
@@ -338,7 +338,7 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
             <Gift className="w-10 h-10 text-emerald-600 mx-auto" />
             <p className="mt-2 font-semibold text-emerald-900">Бэлэг хүргэгдлээ 🎉</p>
             <p className="mt-1 text-sm text-emerald-800">
-              Цугласан {formatMNT(raised)} хүлээн авагчийн данс руу шилжигдсэн байна.
+              Цугласан {formatMNT(raised)} хүлээн авагчийн хэтэвчид орлоо.
             </p>
           </div>
         )}
@@ -381,8 +381,8 @@ export function GroupPoolRoom({ room, onNeedAuth }: { room: Room; onNeedAuth?: (
                     </button>
                   </div>
                   <p className="mt-2 text-xs text-neutral-400">
-                    Линкээр орсон хүн нийт дүн, бүх мэндчилгээг харж, бэлэг хүлээх дансаа
-                    бөглөнө.
+                    Линкээр орсон хүн «Бэлгээ задлах» дармагц нийт дүн болон бүх
+                    мэндчилгээг харж, мөнгө автоматаар түүний хэтэвчид орно.
                   </p>
                 </>
               ) : (
