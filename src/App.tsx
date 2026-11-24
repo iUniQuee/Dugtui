@@ -159,7 +159,7 @@ function App() {
       return (
         <>
           {nav}
-          <LuckyDrawRoom room={room} onNeedAuth={() => setAuthTab('signup')} />
+          <LuckyDrawRoom room={room} onNeedAuth={() => setAuthTab('signup')} onHome={goHome} />
           {authModal}
         </>
       );

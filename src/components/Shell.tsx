@@ -88,8 +88,8 @@ export function Confetti({ count = 60 }: { count?: number }) {
     setPieces(
       Array.from({ length: count }, () => ({
         x: Math.random() * 100,
-        d: 2.5 + Math.random() * 2.5,
-        delay: Math.random() * 1.5,
+        d: 3 + Math.random() * 1.2,
+        delay: Math.random() * 0.8,
         color: colors[(Math.random() * colors.length) | 0],
         rot: Math.random() * 360,
       }))

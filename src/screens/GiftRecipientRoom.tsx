@@ -12,7 +12,7 @@ import {
   Send,
 } from 'lucide-react';
 import { supabase, type Room, type RoomStatus } from '@/lib/supabase';
-import { GiftBg, Money } from '@/components/Shell';
+import { GiftBg, Confetti, Money } from '@/components/Shell';
 import { formatAccountNumber, normalizeAccountNumber } from '@/lib/payments';
 import { themeOf, formatMNT } from '@/lib/utils';
 
@@ -78,6 +78,7 @@ export function GiftRecipientRoom({ token }: { token: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [justSent, setJustSent] = useState(false);
+  const [celebrate, setCelebrate] = useState(false);
 
   const load = useCallback(async () => {
     const { data: res, error: err } = await supabase.rpc('get_gift_by_token', {
@@ -114,6 +115,15 @@ export function GiftRecipientRoom({ token }: { token: string }) {
     const timer = setInterval(() => void load(), 6000);
     return () => clearInterval(timer);
   }, [data?.transfer, load]);
+
+  // Бэлэг хүргэгдэж нээгдсэн үед 5 секунд салют буудна.
+  const delivered = !!data && (data.room.status === 'completed' || data.transfer?.status === 'paid');
+  useEffect(() => {
+    if (!delivered) return;
+    setCelebrate(true);
+    const timer = setTimeout(() => setCelebrate(false), 5000);
+    return () => clearTimeout(timer);
+  }, [delivered]);
 
   const submit = async () => {
     if (!bankName) return setError('Банкаа сонгоно уу.');
@@ -170,6 +180,7 @@ export function GiftRecipientRoom({ token }: { token: string }) {
   return (
     <div className="min-h-screen p-4">
       <GiftBg theme={room.theme} />
+      {celebrate && <Confetti />}
       <div className="mx-auto max-w-lg pt-8 pb-24">
         <div className="text-center">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-neutral-200 px-3 py-1 text-xs font-medium text-neutral-600">

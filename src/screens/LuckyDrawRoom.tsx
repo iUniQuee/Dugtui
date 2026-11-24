@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle2,
-  Trophy,
   Users,
   Sparkles,
   Lock,
@@ -10,6 +9,7 @@ import {
   LogIn,
   Crown,
   AlertTriangle,
+  ArrowLeft,
   X,
 } from 'lucide-react';
 import { supabase, type Room, type Envelope, type RoomParticipant } from '@/lib/supabase';
@@ -30,7 +30,15 @@ function Shagai({ className = '' }: { className?: string }) {
   );
 }
 
-export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: () => void }) {
+export function LuckyDrawRoom({
+  room,
+  onNeedAuth,
+  onHome,
+}: {
+  room: Room;
+  onNeedAuth: () => void;
+  onHome: () => void;
+}) {
   const theme = themeOf(room.theme);
   const isShagai = room.theme === 'tsagaan_sar';
   const { session, profile, loading: authLoading } = useAuth();
@@ -94,12 +102,20 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
   const isFull = required <= 0 || joinedCount >= required;
   const modeLabel = liveRoom.mode === 'equal' ? 'Тэнцүү хуваах' : 'Санамсаргүй хуваах';
 
-  const winners = envelopes.filter((e) => e.claimed).sort((a, b) => b.amount - a.amount);
-  const claimedCount = winners.length;
+  const claimedCount = envelopes.filter((e) => e.claimed).length;
   const total = envelopes.length || required || 0;
 
   const claimedByUser = new Map<string, number>();
   envelopes.forEach((e) => { if (e.claimed && e.claimed_by) claimedByUser.set(e.claimed_by, e.amount); });
+  const prizeValues = participants
+    .map((p) => claimedByUser.get(p.user_id))
+    .filter((v): v is number => v !== undefined);
+  const topPrize = prizeValues.length ? Math.max(...prizeValues) : 0;
+  const hasResults = prizeValues.length > 0;
+  // Бэлэг задарсны дараа хамгийн их хожсоноос бага руу эрэмбэлнэ.
+  const orderedParticipants = hasResults
+    ? [...participants].sort((a, b) => (claimedByUser.get(b.user_id) ?? -1) - (claimedByUser.get(a.user_id) ?? -1))
+    : participants;
   const deviceKey = `claimed_${room.code}`;
   const isOwner = !!session && session.user.id === liveRoom.user_id;
   const cancelled = liveRoom.status === 'CANCELLED';
@@ -245,8 +261,26 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
     <div className="min-h-screen p-4">
       <GiftBg theme={room.theme} />
       <div className="mx-auto max-w-lg pt-8 pb-16">
-        <h1 className="text-2xl font-bold text-center text-neutral-900">{room.title}</h1>
-        <p className="text-center text-sm text-neutral-500 mt-1">Сайн байна уу, {accountName || 'Оролцогч'}?</p>
+        {/* Загварын баярын толгой — дүрс, зохион байгуулагч, мэндчилгээ */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`rounded-3xl bg-gradient-to-br ${theme.gradient} p-6 text-white shadow-xl`}
+        >
+          <div className="flex items-center justify-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
+              <span className="text-base">{theme.emojiHint}</span> {theme.label}
+            </span>
+          </div>
+          <h1 className="mt-3 text-center text-2xl font-extrabold leading-tight">{liveRoom.title}</h1>
+          {liveRoom.organizer_name && (
+            <p className="mt-1 text-center text-sm opacity-90">Зохион байгуулагч: {liveRoom.organizer_name}</p>
+          )}
+          <p className="mt-3 text-center text-sm leading-relaxed opacity-95">
+            {liveRoom.message?.trim() || theme.greeting}
+          </p>
+          <p className="mt-3 text-center text-xs opacity-80">Сайн байна уу, {accountName || 'Оролцогч'}?</p>
+        </motion.div>
 
         {cancelled && (
           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-5 text-center">
@@ -271,11 +305,12 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
           </button>
         )}
 
-        {/* оролцогчид / хүлээлгийн төлөв */}
+        {!cancelled && (
+          <>
+        {/* оролцогчид — ялагчдын үр дүн мөн энд */}
         <div className="mt-6 rounded-2xl bg-white border border-neutral-200 shadow-sm p-4">
           <h2 className="text-sm font-semibold text-neutral-900 flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-sky-500" /> Оролцогчид
-            <span className="ml-auto text-xs font-normal text-neutral-400">{joinedCount}/{required || joinedCount}</span>
+            <Users className="w-4 h-4 text-sky-500" /> Оролцогчид ({joinedCount}/{required || joinedCount})
           </h2>
           <div className="mt-2 h-2 rounded-full bg-neutral-100 overflow-hidden">
             <div className={`h-full rounded-full transition-all duration-500 ${isFull ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${required > 0 ? Math.min(100, (joinedCount / required) * 100) : 100}%` }} />
@@ -295,30 +330,33 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
           {joinError && (
             <p className="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600">{joinError}</p>
           )}
-          {participants.length === 0 ? (
+          {orderedParticipants.length === 0 ? (
             <p className="mt-3 text-xs text-neutral-400">Одоогоор хэн ч ороогүй байна.</p>
           ) : (
             <ul className="mt-3 space-y-1.5">
               <AnimatePresence initial={false}>
-                {participants.map((p, i) => {
+                {orderedParticipants.map((p, i) => {
                   const prize = claimedByUser.get(p.user_id);
                   const isOrganizer = liveRoom.user_id === p.user_id;
+                  const isLuckiest = prize !== undefined && prize > 0 && prize === topPrize;
                   return (
                     <motion.li key={p.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center justify-between gap-2 rounded-xl bg-neutral-50 border border-neutral-100 px-3 py-2 text-sm">
                       <span className="flex items-center gap-2 min-w-0">
                         <span className="w-5 h-5 shrink-0 rounded-full bg-sky-100 text-[10px] font-bold flex items-center justify-center text-sky-700">{i + 1}</span>
-                        <span className="min-w-0">
-                          <span className="flex items-center gap-1 text-neutral-800">
-                            <span className="truncate">{p.display_name}</span>
-                            {isOrganizer && <Crown className="w-3 h-3 text-amber-500 shrink-0" />}
-                          </span>
-                          {p.email && p.email !== p.display_name && (
-                            <span className="block truncate text-[11px] text-neutral-400">{p.email}</span>
-                          )}
+                        <span className="flex items-center gap-1 min-w-0 text-neutral-800">
+                          <span className="truncate">{p.display_name}</span>
+                          {isOrganizer && <Crown className="w-3 h-3 text-amber-500 shrink-0" />}
                         </span>
                       </span>
                       {prize !== undefined ? (
-                        <Money amount={prize} className="shrink-0 font-bold text-emerald-600" />
+                        <span className="flex shrink-0 flex-col items-end gap-0.5">
+                          <Money amount={prize} className={`font-bold ${prize > 0 ? 'text-emerald-600' : 'text-neutral-400'}`} />
+                          {isLuckiest ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">🏆 Хамгийн азтай</span>
+                          ) : prize === 0 ? (
+                            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-semibold text-neutral-500">😜 Хоосон дугтуй</span>
+                          ) : null}
+                        </span>
                       ) : (
                         <span className="shrink-0 text-[11px] text-neutral-400">Хүлээж байна</span>
                       )}
@@ -331,31 +369,6 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
           <p className="mt-3 text-[11px] text-neutral-400 flex items-center gap-1.5">
             <Lock className="w-3 h-3" /> {modeLabel} · {total} дугтуй
           </p>
-        </div>
-
-        {/* амжилтын самбар */}
-        <div className="mt-4 rounded-2xl bg-white border border-neutral-200 shadow-sm p-4">
-          <h2 className="text-sm font-semibold text-neutral-900 flex items-center gap-1.5">
-            <Trophy className="w-4 h-4 text-amber-500" /> Амжилтын самбар
-            <span className="ml-auto text-xs font-normal text-neutral-400">{claimedCount}/{required || total} авсан</span>
-          </h2>
-          {winners.length === 0 ? (
-            <p className="mt-3 text-xs text-neutral-400">Одоогоор хэн ч бэлгээ аваагүй байна.</p>
-          ) : (
-            <ul className="mt-3 space-y-1.5">
-              <AnimatePresence>
-                {winners.map((w, i) => (
-                  <motion.li key={w.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center justify-between rounded-xl bg-neutral-50 border border-neutral-100 px-3 py-2 text-sm">
-                    <span className="flex items-center gap-2 text-neutral-800">
-                      <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center text-white ${i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-neutral-400' : i === 2 ? 'bg-orange-400' : 'bg-neutral-300'}`}>{i + 1}</span>
-                      {w.claimed_by_name}
-                    </span>
-                    <Money amount={w.amount} className="font-bold text-emerald-600" />
-                  </motion.li>
-                ))}
-              </AnimatePresence>
-            </ul>
-          )}
         </div>
 
         {/* дугтуйн сүлжээ — зөвхөн оролцогчдын тоо бүрэн бүрдсэний дараа */}
@@ -411,6 +424,18 @@ export function LuckyDrawRoom({ room, onNeedAuth }: { room: Room; onNeedAuth: ()
         <p className="mt-8 flex items-center justify-center gap-2 text-sm text-neutral-400">
           <Sparkles className="w-4 h-4" /> Бодит цагт шинэчлэгдэж байна
         </p>
+          </>
+        )}
+
+        {cancelled && (
+          <button
+            type="button"
+            onClick={onHome}
+            className="mt-8 flex w-full items-center justify-center gap-2 rounded-xl bg-neutral-900 py-3 text-sm font-semibold text-white hover:bg-neutral-700 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> Нүүр хуудас руу буцах
+          </button>
+        )}
       </div>
 
       {cancelOpen && (
