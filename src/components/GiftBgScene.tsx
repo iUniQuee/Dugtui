@@ -81,14 +81,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'coin',
         x: R(-40, w + 40),
         y: R(0, h + 280),
-        size: R(4.5, 9),
+        size: R(7.5, 15),
         speed: R(15, 30),
         sway: R(8, 20),
         swaySpeed: R(0.25, 0.55),
         phase: R(0, TAU),
         rot: R(0, TAU),
         spin: R(-0.5, 0.5),
-        alpha: R(0.35, 0.58),
+        alpha: R(0.65, 0.8),
         color: '#fbbf24',
       });
     }
@@ -97,14 +97,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'spark',
         x: R(0, w),
         y: R(0, h + 240),
-        size: R(1.6, 3.6),
+        size: R(2.6, 5.8),
         speed: R(6, 18),
         sway: R(4, 14),
         swaySpeed: R(0.3, 0.8),
         phase: R(0, TAU),
         rot: 0,
         spin: 0,
-        alpha: R(0.4, 0.75),
+        alpha: R(0.65, 0.85),
         color: pick(GOLD_GLOW),
       });
     }
@@ -113,14 +113,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'star',
         x: R(0, w),
         y: R(0, h + 240),
-        size: R(3.5, 7.5),
+        size: R(6, 12),
         speed: R(5, 14),
         sway: R(6, 18),
         swaySpeed: R(0.3, 0.7),
         phase: R(0, TAU),
         rot: R(0, TAU),
         spin: R(-0.3, 0.3),
-        alpha: R(0.45, 0.8),
+        alpha: R(0.7, 0.85),
         color: pick(GOLD),
       });
     }
@@ -131,14 +131,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'flake',
         x: R(-30, w + 30),
         y: R(0, h + 220),
-        size: tier === 0 ? R(26, 40) : tier === 1 ? R(14, 22) : R(6, 11),
+        size: tier === 0 ? R(42, 62) : tier === 1 ? R(22, 34) : R(10, 17),
         speed: tier === 0 ? R(13, 21) : tier === 1 ? R(22, 34) : R(34, 52),
         sway: tier === 0 ? R(26, 48) : tier === 1 ? R(14, 30) : R(8, 18),
         swaySpeed: tier === 0 ? R(0.18, 0.32) : R(0.3, 0.5),
         phase: R(0, TAU),
         rot: R(0, TAU),
         spin: R(-0.25, 0.25),
-        alpha: tier === 0 ? R(0.42, 0.58) : tier === 1 ? R(0.52, 0.68) : R(0.6, 0.8),
+        alpha: tier === 0 ? R(0.65, 0.75) : tier === 1 ? R(0.7, 0.8) : R(0.75, 0.85),
         color: '#ffffff',
       });
     }
@@ -148,14 +148,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'balloon',
         x: R(24, w - 24),
         y: R(0, h + 340),
-        size: R(20, 34),
+        size: R(34, 54),
         speed: R(12, 26),
         sway: R(16, 40),
         swaySpeed: R(0.3, 0.65),
         phase: R(0, TAU),
         rot: R(-0.06, 0.06),
         spin: 0,
-        alpha: R(0.26, 0.42),
+        alpha: R(0.65, 0.8),
         color: pick(PASTEL),
       });
     }
@@ -164,14 +164,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'ribbon',
         x: R(0, w),
         y: R(0, h + 340),
-        size: R(9, 17),
+        size: R(15, 27),
         speed: R(20, 42),
         sway: R(10, 26),
         swaySpeed: R(0.5, 1.1),
         phase: R(0, TAU),
         rot: R(0, TAU),
         spin: R(-0.8, 0.8),
-        alpha: R(0.3, 0.55),
+        alpha: R(0.65, 0.85),
         color: pick(PASTEL),
       });
     }
@@ -181,14 +181,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'heart',
         x: R(0, w),
         y: R(0, h + 260),
-        size: R(7, 14),
+        size: R(12, 24),
         speed: R(7, 16),
         sway: R(12, 30),
         swaySpeed: R(0.25, 0.55),
         phase: R(0, TAU),
         rot: R(-0.25, 0.25),
         spin: R(-0.1, 0.1),
-        alpha: R(0.3, 0.5),
+        alpha: R(0.65, 0.8),
         color: pick(HEART_COLORS),
       });
     }
@@ -197,14 +197,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'star',
         x: R(0, w),
         y: R(0, h + 260),
-        size: R(3, 7),
+        size: R(5, 13),
         speed: R(5, 12),
         sway: R(14, 34),
         swaySpeed: R(0.3, 0.7),
         phase: R(0, TAU),
         rot: R(0, TAU),
         spin: R(-0.2, 0.2),
-        alpha: R(0.4, 0.75),
+        alpha: R(0.7, 0.85),
         color: pick(STAR_COLORS),
       });
     }
@@ -213,14 +213,14 @@ function seedScene(key: ThemeKey, w: number, h: number): P[] {
         kind: 'spark',
         x: R(0, w),
         y: R(0, h + 240),
-        size: R(1.4, 3.2),
+        size: R(2.4, 5.6),
         speed: R(4, 10),
         sway: R(6, 16),
         swaySpeed: R(0.3, 0.8),
         phase: R(0, TAU),
         rot: 0,
         spin: 0,
-        alpha: R(0.35, 0.7),
+        alpha: R(0.65, 0.85),
         color: pick(SPARK_GLOW),
       });
     }
@@ -292,9 +292,9 @@ function makeSnowSprite(): HTMLCanvasElement {
         c.restore();
       }
     };
-    // Цайвар дэвсгэр дээр ч харагдахын тулд зөөлөн ягаан контур, дээрээс нь цагаан.
-    arms(7, 'rgba(190,24,93,0.16)');
-    arms(3, 'rgba(255,255,255,1)');
+    // Цайвар дэвсгэр дээр ч харагдахын тулд зөөлөн цэнхэр контур, дээрээс нь цагаан.
+    arms(8, 'rgba(30,58,95,0.22)');
+    arms(3.8, 'rgba(255,255,255,1)');
   });
 }
 
@@ -392,17 +392,18 @@ function drawBalloon(
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(Math.sin(t * 0.5 + phase) * 0.1);
-  ctx.strokeStyle = 'rgba(120,113,108,0.32)';
-  ctx.lineWidth = 1.1;
+  ctx.strokeStyle = 'rgba(120,113,108,0.45)';
+  ctx.lineWidth = 1.4;
+  const sl = bh * 0.95;
   ctx.beginPath();
   ctx.moveTo(0, bh / 2 + 4);
   ctx.bezierCurveTo(
-    Math.sin(t * 1.1 + phase) * 6,
-    bh / 2 + 16,
-    -Math.sin(t * 1.1 + phase) * 7,
-    bh / 2 + 28,
-    Math.sin(t * 0.9 + phase) * 5,
-    bh / 2 + 36
+    Math.sin(t * 1.1 + phase) * 8,
+    bh / 2 + sl * 0.35,
+    -Math.sin(t * 1.1 + phase) * 9,
+    bh / 2 + sl * 0.7,
+    Math.sin(t * 0.9 + phase) * 7,
+    bh / 2 + sl
   );
   ctx.stroke();
   ctx.globalAlpha = alpha;
@@ -440,13 +441,13 @@ function drawRibbon(
   ctx.rotate(rot + Math.sin(t * 1.2 + phase) * 0.4);
   ctx.globalAlpha = alpha * (0.7 + 0.3 * Math.sin(t * 2 + phase));
   ctx.strokeStyle = color;
-  ctx.lineWidth = 2.4;
+  ctx.lineWidth = 3.6;
   ctx.lineCap = 'round';
   const seg = 4;
   ctx.beginPath();
   ctx.moveTo(0, 0);
   for (let k = 1; k <= seg; k++) {
-    ctx.lineTo(Math.sin(t * 1.8 + phase + k * 0.95) * 3.4, -k * (len / seg));
+    ctx.lineTo(Math.sin(t * 1.8 + phase + k * 0.95) * 4.6, -k * (len / seg));
   }
   ctx.stroke();
   ctx.restore();
@@ -472,8 +473,8 @@ function render(
   if (key === 'tsagaan_sar') {
     // Дулаан алтан туяа — дээд талаас зөөлөн буух гэрэл.
     const glow = ctx.createRadialGradient(w / 2, -h * 0.12, 0, w / 2, -h * 0.12, h * 1.05);
-    glow.addColorStop(0, 'rgba(253,230,138,0.26)');
-    glow.addColorStop(0.5, 'rgba(251,191,36,0.09)');
+    glow.addColorStop(0, 'rgba(253,230,138,0.32)');
+    glow.addColorStop(0.5, 'rgba(251,191,36,0.12)');
     glow.addColorStop(1, 'rgba(251,191,36,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
@@ -502,27 +503,27 @@ function render(
   } else if (key === 'shine_jil') {
     // Цасан дээрх бүрхэг гэрэл.
     const glow = ctx.createRadialGradient(w * 0.5, -h * 0.05, 0, w * 0.5, -h * 0.05, h * 0.8);
-    glow.addColorStop(0, 'rgba(255,255,255,0.34)');
-    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    glow.addColorStop(0, 'rgba(56,189,248,0.22)');
+    glow.addColorStop(1, 'rgba(56,189,248,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
   } else if (key === 'birthday') {
     // Доод талаас дулаахан ягаан гэрэл.
     const glow = ctx.createRadialGradient(w * 0.5, h * 1.05, 0, w * 0.5, h * 1.05, h * 0.9);
-    glow.addColorStop(0, 'rgba(244,114,182,0.1)');
-    glow.addColorStop(1, 'rgba(244,114,182,0)');
+    glow.addColorStop(0, 'rgba(192,132,252,0.14)');
+    glow.addColorStop(1, 'rgba(192,132,252,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
   } else {
     // Зөөлөн дулаахан дэвсгэр.
     const warm = ctx.createRadialGradient(w * 0.15, h * 1.05, 0, w * 0.15, h * 1.05, h * 0.85);
-    warm.addColorStop(0, 'rgba(251,191,36,0.14)');
+    warm.addColorStop(0, 'rgba(251,191,36,0.18)');
     warm.addColorStop(1, 'rgba(251,191,36,0)');
     ctx.globalAlpha = 0.75 + Math.sin(t * 0.25) * 0.25;
     ctx.fillStyle = warm;
     ctx.fillRect(0, 0, w, h);
     const rose = ctx.createRadialGradient(w * 0.88, h * 0.02, 0, w * 0.88, h * 0.02, h * 0.7);
-    rose.addColorStop(0, 'rgba(251,113,133,0.1)');
+    rose.addColorStop(0, 'rgba(251,113,133,0.12)');
     rose.addColorStop(1, 'rgba(251,113,133,0)');
     ctx.fillStyle = rose;
     ctx.fillRect(0, 0, w, h);
