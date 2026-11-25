@@ -14,7 +14,8 @@ import {
 } from 'lucide-react';
 import { supabase, type Room, type Envelope, type RoomParticipant } from '@/lib/supabase';
 import { useAuth } from '@/lib/useAuth';
-import { GiftBg, Confetti, Money } from '@/components/Shell';
+import { GiftBg, Money } from '@/components/Shell';
+import { Celebration } from '@/components/Celebration';
 import { WithdrawModal } from '@/components/WithdrawModal';
 import { themeOf } from '@/lib/utils';
 
@@ -208,7 +209,7 @@ export function LuckyDrawRoom({
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <GiftBg theme={room.theme} />
-        {!isEmpty && <Confetti />}
+        {!isEmpty && <Celebration theme={room.theme} />}
         <div className="bg-white/95 rounded-3xl shadow-2xl border border-neutral-200 p-8 w-full max-w-sm text-center">
           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', bounce: 0.5 }}>
             {isEmpty ? (
