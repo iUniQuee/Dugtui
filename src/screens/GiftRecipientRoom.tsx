@@ -13,7 +13,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import { supabase, type Room, type RoomStatus } from '@/lib/supabase';
-import { GiftBg, Confetti, Money } from '@/components/Shell';
+import { GiftBg, Money } from '@/components/Shell';
+import { Celebration } from '@/components/Celebration';
 import { useAuth } from '@/lib/useAuth';
 import { themeOf, formatMNT } from '@/lib/utils';
 
@@ -108,12 +109,13 @@ export function GiftRecipientRoom({
     void load();
   }, [load, session?.user.id]);
 
+  // Баярын эффект зөвхөн бэлгийг одоо задлах үед ажиллана (хуудсаа дахин
+  // нээхэд давтан асахгүй). Canvas эффект өөрөө 4.5 секундэд зогсоно.
   useEffect(() => {
-    if (!revealed) return;
-    setCelebrate(true);
-    const timer = setTimeout(() => setCelebrate(false), 5000);
+    if (!celebrate) return;
+    const timer = setTimeout(() => setCelebrate(false), 5200);
     return () => clearTimeout(timer);
-  }, [revealed]);
+  }, [celebrate]);
 
   const openGift = async () => {
     if (claiming) return;
@@ -138,6 +140,7 @@ export function GiftRecipientRoom({
       );
     }
     setRevealed(true);
+    setCelebrate(true);
     void load();
   };
 
@@ -308,7 +311,7 @@ export function GiftRecipientRoom({
   return (
     <div className="min-h-screen p-4">
       <GiftBg theme={room.theme} />
-      {celebrate && <Confetti />}
+      {celebrate && <Celebration theme={room.theme} />}
       <div className="mx-auto max-w-lg pt-8 pb-24">
         <div className="text-center">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/80 border border-neutral-200 px-3 py-1 text-xs font-medium text-neutral-600">
