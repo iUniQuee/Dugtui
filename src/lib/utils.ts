@@ -95,7 +95,7 @@ export const THEMES: ThemeDef[] = [
     accent: 'text-amber-600',
     ring: 'ring-amber-400',
     cardBg: 'bg-amber-50',
-    pageBg: 'from-amber-100 via-orange-50 to-white',
+    pageBg: 'from-amber-200 via-orange-100 to-amber-50',
     greeting:
       'Сар шинэдээ сайхан шинэлж, айл хотлоороо эрүүл энх, амар амгалан, аз хийморь дүүрэн байх болтугай!',
     revealEmoji: '🎲',
@@ -111,7 +111,7 @@ export const THEMES: ThemeDef[] = [
     accent: 'text-red-600',
     ring: 'ring-red-400',
     cardBg: 'bg-red-50',
-    pageBg: 'from-red-100 via-rose-50 to-white',
+    pageBg: 'from-sky-300 via-sky-100 to-slate-100',
     greeting:
       'Шинэ оны баярын мэнд хүргэе! Ирж буй 2027 он тань амжилт бүтээл, эрүүл энх, аз жаргалаар дүүрэн байх болтугай!',
     revealEmoji: '🎁',
@@ -127,7 +127,7 @@ export const THEMES: ThemeDef[] = [
     accent: 'text-sky-600',
     ring: 'ring-sky-400',
     cardBg: 'bg-sky-50',
-    pageBg: 'from-pink-100 via-sky-50 to-white',
+    pageBg: 'from-pink-200 via-fuchsia-100 to-violet-100',
     greeting:
       'Төрсөн өдрийн баярын мэнд хүргэе! Санасан бүхэн тань сэтгэлчлэн бүтэж, хүсэл бүхэн тань биелэх болтугай!',
     revealEmoji: '🎂',
@@ -143,7 +143,7 @@ export const THEMES: ThemeDef[] = [
     accent: 'text-stone-600',
     ring: 'ring-stone-400',
     cardBg: 'bg-stone-50',
-    pageBg: 'from-stone-100 via-neutral-50 to-white',
+    pageBg: 'from-orange-100 via-amber-50 to-orange-50',
     greeting: 'Танд баярын мэнд хүргэе! Сайхан баярлаарай!',
     revealEmoji: '🎁',
     revealLabel: 'Дугтуй',
