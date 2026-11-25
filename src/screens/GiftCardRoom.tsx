@@ -3,7 +3,8 @@ import { motion } from 'framer-motion';
 import { CheckCircle2, Clock, Copy, Gift, Link2, Lock, Wallet, XCircle } from 'lucide-react';
 import { supabase, type Room } from '@/lib/supabase';
 import { useAuth } from '@/lib/useAuth';
-import { GiftBg, Confetti, Money } from '@/components/Shell';
+import { GiftBg, Money } from '@/components/Shell';
+import { Celebration } from '@/components/Celebration';
 import { themeOf } from '@/lib/utils';
 
 /**
@@ -236,7 +237,7 @@ export function GiftCardRoom({
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <GiftBg theme={live.theme} />
-        <Confetti />
+        {claimedRoom && <Celebration theme={live.theme} />}
         <motion.div
           initial={{ scale: 0.85, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
